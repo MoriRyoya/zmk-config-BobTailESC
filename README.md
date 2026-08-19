@@ -1,4 +1,4 @@
-BobTail専用ファームウェアリポジトリ
+BobTail/BobTailESC専用ファームウェアリポジトリ
 forkしてから使用してください。
 
 
