@@ -1,4 +1,7 @@
 name: BobTail
 build:
+  cmake: pmw3610
+  kconfig: pmw3610/Kconfig
   settings:
     board_root: config
+    dts_root: pmw3610

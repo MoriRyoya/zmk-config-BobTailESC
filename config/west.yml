@@ -10,9 +10,6 @@ manifest:
       remote: na-ka-no  # フォークしたリポジトリを参照  
       revision: for-cool642tb_mini  # カスタムブランチ名  
       import: app/west.yml  
-    - name: zmk-pmw3610-driver  
-      remote: na-ka-no
-      revision: main  
   
   self:  
     path: config
