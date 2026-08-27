@@ -38,39 +38,118 @@
     }
     .board-wrap {
       max-width: 980px; margin: 0 auto; background: var(--panel);
-      border: 1px solid #262b35; border-radius: 20px; padding: 28px 18px 18px; overflow-x: auto;
+      border: 1px solid #262b35; border-radius: 20px; padding: 18px 12px 12px;
     }
-    .board { position: relative; width: calc(var(--unit) * 13.514 + 8px); height: calc(var(--unit) * 4 + 8px); margin: 0 auto; }
-    .key, .ghost, .enc {
-      position: absolute; width: calc(var(--unit) - var(--gap)); height: calc(var(--unit) - var(--gap));
-      border-radius: 10px; border: 1px solid var(--key-edge); background: var(--key);
-      display: flex; flex-direction: column; justify-content: space-between; padding: 7px 6px 6px; user-select: none;
+    .board {
+      position: relative; width: 100%; max-width: 920px; aspect-ratio: 1024 / 594;
+      margin: 0 auto;
     }
-    .key.trans { background: var(--trans); color: #6c7280; border-style: dashed; }
-    .key.none { background: transparent; border-style: dashed; border-color: #3a4150; color: #5a6170; }
+    .hw, .keys { position: absolute; inset: 0; }
+    .keys { z-index: 1; }
+    .case {
+      position: absolute;
+      border-radius: 26px;
+      background: #1a1e26;
+      border: 1.5px solid #3a4250;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 22px rgba(0,0,0,0.28);
+    }
+    .case-l { left: 4.4%; top: 16.16%; width: 42.97%; height: 60.44%; }
+    .case-r { left: 53.22%; top: 16.16%; width: 42.09%; height: 60.27%; }
+    .enc {
+      position: absolute; z-index: 1;
+      left: 39.10%; top: 40.36%; width: 5.97%; height: 9.85%;
+      border-radius: 8px; border: 1.5px solid #4a5364;
+      background: #16191f;
+      display: flex; padding: 3px;
+      box-shadow: 0 2px 0 #0c0e12;
+    }
+    .enc-slot {
+      flex: 1; min-height: 0;
+      border: 1px solid #323846; border-radius: 5px;
+      background: #12141a;
+      padding: 3px 4px;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.55);
+    }
+    .enc-wheel {
+      position: relative;
+      height: 100%;
+      border-radius: 4px;
+      overflow: hidden;
+      background: linear-gradient(90deg, #1a1d24 0%, #5c6570 22%, #c8cdd4 48%, #5c6570 74%, #14171c 100%);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.28);
+    }
+    .enc-wheel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.0) 0 2px,
+        rgba(0,0,0,0.42) 2px 3px
+      );
+    }
+    .enc-wheel::after {
+      content: "";
+      position: absolute;
+      top: 8%; bottom: 8%;
+      left: 42%;
+      width: 16%;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.22);
+      filter: blur(1px);
+    }
+    .tb {
+      position: absolute; z-index: 1;
+      left: 66.4%; top: 56.4%; width: 24.2%; height: 18.6%;
+      display: flex; align-items: center; gap: 2.4%;
+    }
+    .tb-hatch {
+      border: 1px solid #3a4250;
+      background: repeating-linear-gradient(-45deg, #2a313a 0 3px, #16191f 3px 6px);
+    }
+    .tb-hatch-l { width: 18%; height: 58%; border-radius: 4px; }
+    .tb-ring {
+      position: relative; width: 46%; aspect-ratio: 1; height: auto; align-self: center;
+      border-radius: 50%; background: #12151b; border: 2px solid #3a4250;
+      box-shadow: inset 0 6px 12px rgba(0,0,0,0.55);
+    }
+    .tb-sphere {
+      position: absolute; inset: 10%; border-radius: 50%;
+      background: radial-gradient(circle at 32% 26%, #8a909a 0 7%, #3a404a 36%, #14161b 72%);
+      box-shadow: inset -6px -8px 12px rgba(0,0,0,0.45), 0 4px 8px rgba(0,0,0,0.35);
+    }
+    .tb-sphere::after {
+      content: ""; position: absolute; left: 22%; top: 16%; width: 28%; height: 18%;
+      border-radius: 50%; background: rgba(255,255,255,0.22); filter: blur(1px);
+    }
+    .tb-frame {
+      width: 28%; height: 62%; border-radius: 8px; padding: 8% 10%;
+      background: #1a1e26; border: 1.5px solid #3a4250;
+    }
+    .tb-hatch-r { width: 100%; height: 100%; border-radius: 4px; }
+    .key {
+      position: absolute;
+      border-radius: 8px; border: 1.5px solid #4a5364;
+      background: #16191f; color: var(--ink);
+      display: flex; padding: 3px; user-select: none;
+      box-shadow: 0 2px 0 #0c0e12;
+    }
+    .key .face {
+      flex: 1; min-height: 0;
+      border: 1px solid #323846; border-radius: 5px; background: var(--key);
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 3px 4px 2px;
+    }
+    .key.trans { background: var(--trans); color: #6c7280; box-shadow: none; }
+    .key.trans .face { background: var(--trans); border-style: dashed; }
+    .key.none .face { background: transparent; border-style: dashed; }
     .key.kind-mod .hold { color: var(--mod); }
     .key.kind-layer .hold { color: var(--layer); }
     .key.kind-ime .tap { color: var(--ime); }
     .key.kind-num .tap { color: var(--num); }
-    .hold { font-size: 10px; line-height: 1.1; color: var(--hold); min-height: 12px; }
-    .tap { font-size: 13px; font-weight: 620; line-height: 1.15; }
-    .enc {
-      align-items: center; justify-content: center; border-radius: 50%;
-      background: #1a1d24; border-color: #4a5364; color: var(--muted); font-size: 10px; padding: 0;
-    }
-    .enc i {
-      display: block; width: 28px; height: 28px; border-radius: 50%;
-      border: 2px solid #6a7384; margin: 0 auto 2px;
-      background: conic-gradient(from 0deg, #2a303a, #4a5364, #2a303a);
-    }
-    .ghost {
-      background: transparent; border: 1.5px dashed #3a4150; align-items: center; justify-content: center;
-      color: var(--muted); font-size: 11px;
-    }
-    .ball {
-      width: 46px; height: 46px; border-radius: 50%; border: 1.5px solid #4a5364;
-      background: radial-gradient(circle at 35% 30%, #3a414e, #1a1d24 70%); margin-bottom: 4px;
-    }
+    .hold { font-size: 9px; line-height: 1.05; color: var(--hold); min-height: 10px; }
+    .tap { font-size: 12px; font-weight: 650; line-height: 1.1; }
     .note { max-width: 980px; margin: 18px auto 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
     .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
     .legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -98,15 +177,14 @@
       max-width: 980px;
       margin: 0 auto 8px;
     }
-    body.embed, html.embed { --unit: 44px; --gap: 5px; }
-    body.hud, html.hud { --unit: 38px; --gap: 4px; }
     body.embed .board-wrap, body.hud .board-wrap {
-      padding: 16px 12px 12px;
+      padding: 8px 8px 10px;
       border-radius: 16px;
     }
     body.hud .board-wrap {
       background: rgba(23, 26, 33, 0.92);
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      border: 1px solid #262b35;
     }
     .layer-chip {
       font-size: 11px;
@@ -117,12 +195,13 @@
       background: #ece8df;
       color: #0f1115;
     }
-    body.embed .hold, body.hud .hold { font-size: 9px; min-height: 10px; }
-    body.embed .tap, body.hud .tap { font-size: 11px; }
-    body.embed .key, body.embed .ghost, body.embed .enc,
-    body.hud .key, body.hud .ghost, body.hud .enc { padding: 5px 4px 4px; border-radius: 8px; }
-    body.embed .enc i, body.hud .enc i { width: 18px; height: 18px; }
-    body.embed .ball, body.hud .ball { width: 30px; height: 30px; }
+    body.embed .hold, body.hud .hold { font-size: 8px; min-height: 9px; }
+    body.embed .tap, body.hud .tap { font-size: 10px; }
+    body.embed .key, body.hud .key,
+    body.embed .enc, body.hud .enc { padding: 2px; border-radius: 6px; }
+    body.embed .key .face, body.hud .key .face { padding: 2px 3px 1px; border-radius: 4px; }
+    body.embed .enc-slot, body.hud .enc-slot,
+    body.embed .enc-wheel, body.hud .enc-wheel { border-radius: 4px; }
   </style>
   <script>
     (function () {
@@ -136,7 +215,7 @@
 <body>
   <header>
     <h1>BobTailESC キーマップ</h1>
-    <p class="lede">上が長押し、下がタップ。対になるキーは左右対称です。Space / Enter / ⌫ / Fn をクリックすると、そのレイヤーへ飛びます。</p>
+    <p class="lede">図面を CSS でトレースしています。上が長押し、下がタップ。Space / Enter / ⌫ / Fn をクリックすると、そのレイヤーへ飛びます。</p>
   </header>
   <div class="hud-meta"><span class="layer-chip" id="layer-chip">Base</span></div>
   <div class="toolbar">
@@ -146,7 +225,21 @@
       <button class="os" id="os-win" aria-pressed="false">Windows</button>
     </div>
   </div>
-  <div class="board-wrap"><div class="board" id="board"></div></div>
+  <div class="board-wrap">
+    <div class="board" id="board">
+      <div class="hw" aria-hidden="true">
+        <div class="case case-l"></div>
+        <div class="case case-r"></div>
+        <div class="enc" title="エンコーダ"><div class="enc-slot"><div class="enc-wheel"></div></div></div>
+        <div class="tb" title="トラックボール">
+          <div class="tb-hatch tb-hatch-l"></div>
+          <div class="tb-ring"><div class="tb-sphere"></div></div>
+          <div class="tb-frame"><div class="tb-hatch tb-hatch-r"></div></div>
+        </div>
+      </div>
+      <div class="keys" id="keys"></div>
+    </div>
+  </div>
   <p class="note" id="note"></p>
   <p class="note">
     <span class="legend">
@@ -157,15 +250,8 @@
     </span>
   </p>
 <script>
-const LAYOUT = [
-  [0,0],[1.003,0],[2.005,0],[3.008,0],[4.011,0],
-  [8.504,0],[9.506,0],[10.509,0],[11.512,0],[12.514,0],
-  [0,1],[1.003,1],[2.005,1],[3.008,1],[4.011,1],[5.015,1],
-  [7.501,1],[8.504,1],[9.506,1],[10.509,1],[11.512,1],[12.514,1],
-  [0,2],[1.003,2],[2.005,2],[3.008,2],[4.011,2],[5.013,2],
-  [7.501,2],[8.504,2],[9.506,2],[10.509,2],[11.512,2],[12.514,2],
-  [0,3],[1.003,3],[2.005,3],[3.008,3],[4.011,3],[5.013,3],
-  [7.501,3],[8.504,3],[12.514,3],
+const KEY_BOXES = [
+  {x:6.055,y:26.936,w:5.371,h:8.923}, {x:12.988,y:24.074,w:5.176,h:8.754}, {x:19.531,y:21.886,w:5.273,h:8.754}, {x:26.172,y:23.906,w:5.273,h:8.586}, {x:32.910,y:25.421,w:5.176,h:8.754}, {x:62.402,y:25.421,w:5.273,h:8.754}, {x:69.043,y:23.906,w:5.176,h:8.586}, {x:75.684,y:21.886,w:5.176,h:8.754}, {x:82.324,y:23.906,w:5.176,h:8.754}, {x:88.965,y:26.768,w:5.176,h:8.754}, {x:6.055,y:38.215,w:5.371,h:8.923}, {x:12.988,y:35.354,w:5.176,h:8.754}, {x:19.531,y:32.997,w:5.273,h:8.586}, {x:26.172,y:35.017,w:5.273,h:8.754}, {x:32.910,y:36.700,w:5.176,h:8.754}, null, {x:55.664,y:39.562,w:5.273,h:8.923}, {x:62.402,y:36.700,w:5.273,h:8.754}, {x:69.043,y:35.017,w:5.176,h:8.586}, {x:75.684,y:32.997,w:5.176,h:8.586}, {x:82.324,y:35.017,w:5.176,h:8.754}, {x:88.965,y:38.047,w:5.176,h:8.923}, {x:6.055,y:49.495,w:5.371,h:8.923}, {x:12.988,y:46.633,w:5.176,h:8.754}, {x:19.531,y:44.108,w:5.273,h:8.754}, {x:26.172,y:46.128,w:5.273,h:8.923}, {x:32.910,y:47.980,w:5.176,h:8.923}, {x:39.453,y:52.020,w:5.273,h:8.754}, {x:55.664,y:51.010,w:5.273,h:8.923}, {x:62.402,y:47.980,w:5.273,h:8.923}, {x:69.043,y:46.128,w:5.176,h:8.754}, {x:75.684,y:43.939,w:5.176,h:8.754}, {x:82.324,y:46.296,w:5.176,h:8.754}, {x:88.867,y:49.495,w:5.176,h:8.923}, {x:6.055,y:60.943,w:5.371,h:9.259}, {x:12.988,y:57.407,w:5.176,h:9.428}, {x:19.531,y:55.387,w:5.273,h:9.091}, {x:26.172,y:57.407,w:5.273,h:9.091}, {x:32.910,y:59.428,w:5.176,h:8.923}, {x:39.453,y:63.131,w:5.273,h:8.923}, {x:55.664,y:62.458,w:5.273,h:9.428}, {x:62.402,y:59.428,w:5.273,h:8.923}, {x:89.062,y:60.943,w:5.078,h:8.923}
 ];
 const ENC = 15;
 
@@ -179,14 +265,14 @@ const BASE_MAC = [
   T("Y"), T("U"), T("I"), T("O"), T("P"),
   H("A", "⌘", "mod"), H("S", "⌥", "mod"), H("D", "⌃", "mod"), H("F", "⇧", "mod"), T("G"),
   NO,
-  H("", "Fn", "layer", { goto: "fn" }), T("H"), H("J", "⇧", "mod"), H("K", "⌃", "mod"), H("L", "⌥", "mod"), H(";", "⌘", "mod"),
+  T("?"), T("H"), H("J", "⇧", "mod"), H("K", "⌃", "mod"), H("L", "⌥", "mod"), H(";", "⌘", "mod"),
   T("Z"), T("X"), T("C"), T("V"), T("B"),
   T("Esc"),
   T("⌫"), T("N"), T("M"), T(","), T("."), T("/"),
   T("Tab"), T("⌃", { kind: "mod" }), T("⌘", { kind: "mod" }),
   H("", "Gesture", "layer", { goto: "gesture" }), H("英数", "L⌥", "ime"), H("Space", "Num", "layer", { goto: "num" }),
   H("Enter", "Sym", "layer", { goto: "sym" }), H("かな", "R⌥", "ime"),
-  NO,
+  H("", "Fn", "layer", { goto: "fn" }),
 ];
 
 const BASE_WIN = BASE_MAC.map((k, i) => ({
@@ -278,7 +364,6 @@ const LAYERS = [
   { id: "mouse", name: "Mouse" },
 ];
 
-let UNIT = 62;
 let current = "base";
 let os = "mac";
 
@@ -288,7 +373,6 @@ function applyAppearance(mode) {
   document.body.classList.remove("page", "embed", "hud");
   document.documentElement.classList.add(resolved);
   document.body.classList.add(resolved);
-  UNIT = resolved === "hud" ? 38 : resolved === "embed" ? 44 : 62;
 }
 
 applyAppearance((location.hash || "").replace("#", ""));
@@ -321,42 +405,38 @@ function render() {
     tabs.appendChild(b);
   }
 
-  const board = document.getElementById("board");
-  board.innerHTML = "";
+  const keysEl = document.getElementById("keys");
+  keysEl.innerHTML = "";
+  const pad = { x: 0.35, y: 0.55, w: 0.7, h: 1.1 };
+  const place = (el, box) => {
+    el.style.left = (box.x - pad.x) + "%";
+    el.style.top = (box.y - pad.y) + "%";
+    el.style.width = (box.w + pad.w) + "%";
+    el.style.height = (box.h + pad.h) + "%";
+  };
+  const esc = KEY_BOXES[27];
+  const space = KEY_BOXES[39];
+  const encEl = document.querySelector(".enc");
+  if (encEl && esc && space) {
+    const gap = space.y - (esc.y + esc.h);
+    place(encEl, { x: esc.x, y: esc.y - gap - esc.h, w: esc.w, h: esc.h });
+  }
   keysFor(current).forEach((key, i) => {
-    const [x, y] = LAYOUT[i];
-    if (i === ENC) {
-      const enc = document.createElement("div");
-      enc.className = "enc";
-      enc.style.left = (x * UNIT) + "px";
-      enc.style.top = (y * UNIT) + "px";
-      enc.innerHTML = "<i></i>enc";
-      enc.title = "ロータリーエンコーダ（キーではない）";
-      board.appendChild(enc);
-      return;
-    }
+    const box = KEY_BOXES[i];
+    if (!box || i === ENC) return;
     const div = document.createElement("div");
     div.className = "key";
     if (key.trans) div.classList.add("trans");
     if (key.none) div.classList.add("none");
     if (key.kind) div.classList.add("kind-" + key.kind);
-    div.style.left = (x * UNIT) + "px";
-    div.style.top = (y * UNIT) + "px";
-    div.innerHTML = `<div class="hold">${key.hold || ""}</div><div class="tap">${key.tap || ""}</div>`;
+    place(div, box);
+    div.innerHTML = `<div class="face"><div class="hold">${key.hold || ""}</div><div class="tap">${key.tap || ""}</div></div>`;
     if (key.goto) {
       div.style.cursor = "pointer";
       div.addEventListener("click", () => { current = key.goto; render(); });
     }
-    board.appendChild(div);
+    keysEl.appendChild(div);
   });
-
-  const ghost = document.createElement("div");
-  ghost.className = "ghost";
-  ghost.style.left = (10.0 * UNIT) + "px";
-  ghost.style.top = (3 * UNIT) + "px";
-  ghost.style.width = (1.8 * UNIT) + "px";
-  ghost.innerHTML = `<div class="ball"></div>trackball`;
-  board.appendChild(ghost);
 
   document.getElementById("note").textContent = NOTES[current] || "";
   document.getElementById("os-mac").setAttribute("aria-pressed", os === "mac" ? "true" : "false");

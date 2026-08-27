@@ -9,7 +9,7 @@
  *  34  35  36  37  38  39             40  41    (ball)    42
  *              ~~~~~~~~~~~~~~~~       ~~~~~~
  *              打ちやすい親指 4+Gesture     右親指 2 個
- *              (34/35/36/42 は押しづらいのでレイヤーでは使わない)
+ *              (34/35/36 は押しづらいのでレイヤーでは使わない。42 は Fn)
  *
  * 設計方針
  *   - 15 番はエンコーダなので割り当てない (bindings 上は &none)
@@ -262,17 +262,17 @@
          *  そのすぐ外側: Gesture (旧英数の位置)
          *
          *  Q     W     E     R     T   |   Y     U     I     O     P
-         *  A/⌘  S/⌥  D/⌃  F/⇧   G  enc| Fn   H   J/⇧ K/⌃ L/⌥  ;/⌘
+         *  A/⌘  S/⌥  D/⌃  F/⇧   G  enc|  ?   H   J/⇧ K/⌃ L/⌥  ;/⌘
          *  Z     X     C     V     B  Esc| ⌫    N     M     ,     .     /
-         * Tab   ⌃    ⌘   GES  英数/⌥  Spc| Ent  かな/⌥
+         * Tab   ⌃    ⌘   GES  英数/⌥  Spc| Ent  かな/⌥                    Fn
          * ============================================================ */
         base_layer {
             display-name = "Base";
             bindings = <
 &kp Q         &kp W         &kp E          &kp R          &kp T                                          &kp Y      &kp U         &kp I         &kp O         &kp P
-&hml LGUI A   &hml LALT S   &hml LCTRL D   &hml LSHFT F   &kp G       &none                 MO_FN         &kp H      &hmr RSHFT J  &hmr RCTRL K  &hmr RALT L   &hmr RGUI SEMI
+&hml LGUI A   &hml LALT S   &hml LCTRL D   &hml LSHFT F   &kp G       &none                 &kp QMARK     &kp H      &hmr RSHFT J  &hmr RCTRL K  &hmr RALT L   &hmr RGUI SEMI
 &kp Z         &kp X         &kp C          &kp V          &kp B       &kp ESC               &kp BSPC      &kp N      &kp M         &kp COMMA     &kp DOT       &kp SLASH
-&kp TAB       &kp LCTRL     &kp LGUI       HOLD_GEST      &ime_mod LALT LANG2   &lt_num NUM SPACE     &lt_sym SYM ENTER &ime_mod RALT LANG1                              &none
+&kp TAB       &kp LCTRL     &kp LGUI       HOLD_GEST      &ime_mod LALT LANG2   &lt_num NUM SPACE     &lt_sym SYM ENTER &ime_mod RALT LANG1                              MO_FN
             >;
             sensor-bindings = <&enc_scroll>;
         };
@@ -316,7 +316,7 @@
          * 4: NUM — Space 長押し。左手がテンキー、右手が矢印と括弧
          *
          *   .   7   8   9   +   |  行頭   (    ↑    )   行末
-         *   /   4   5   6   -  enc| Fn    {    ←    ↓    →    }
+         *   /   4   5   6   -  enc|  ?    {    ←    ↓    →    }
          *   0   1   2   3   =  Esc| Del   [    ]   単語← 単語→  \
          *
          * 最下行の外側 (Tab/⌃/⌘) は使わない。* は Sym 層
