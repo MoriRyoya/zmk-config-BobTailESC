@@ -66,19 +66,19 @@
 
         /* Gesture 押し中はカーソルを動かさず、フリックをショートカットにする。
            bindings の順はドライバ固定: +X / -X / -Y / +Y
-           （画面上の右 / 左 / 上 / 下 に合わせてある） */
+           tick は大きめにして、1 フリックで 2 回発火しないようにする */
         gest_mac {
             layers = <6>;
-            tick = <90>;
-            wait-ms = <280>;
+            tick = <220>;
+            wait-ms = <500>;
             tap-ms = <20>;
             bindings = <&kp LC(RIGHT) &kp LC(LEFT) &kp LC(UP) &kp LC(DOWN)>;
         };
 
         gest_win {
             layers = <8>;
-            tick = <90>;
-            wait-ms = <280>;
+            tick = <220>;
+            wait-ms = <500>;
             tap-ms = <20>;
             bindings = <&kp LC(LG(RIGHT)) &kp LC(LG(LEFT)) &kp LG(TAB) &kp LG(D)>;
         };
