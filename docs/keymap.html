@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BobTailESC キーマップ</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --key: #22262f;
+      --key-edge: #323846;
+      --ink: #ece8df;
+      --muted: #8b91a0;
+      --hold: #c8a36a;
+      --layer: #6ea8ff;
+      --mod: #9ad0b4;
+      --ime: #e6a0b8;
+      --num: #d4b483;
+      --trans: #2a2e38;
+      --gap: 6px;
+      --unit: 62px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "SF Pro Text", system-ui, sans-serif; }
+    body { min-height: 100vh; padding: 32px 24px 64px; }
+    header { max-width: 980px; margin: 0 auto 28px; }
+    h1 { font-size: 22px; font-weight: 650; margin: 0 0 6px; }
+    .lede { color: var(--muted); font-size: 13px; line-height: 1.65; margin: 0; }
+    .toolbar { max-width: 980px; margin: 0 auto 18px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+    button.tab, button.os {
+      appearance: none; border: 1px solid var(--key-edge); background: var(--panel);
+      color: var(--ink); padding: 7px 12px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer;
+    }
+    button.tab[aria-selected="true"], button.os[aria-pressed="true"] {
+      background: var(--ink); color: var(--bg); border-color: var(--ink);
+    }
+    .board-wrap {
+      max-width: 980px; margin: 0 auto; background: var(--panel);
+      border: 1px solid #262b35; border-radius: 20px; padding: 28px 18px 18px; overflow-x: auto;
+    }
+    .board { position: relative; width: calc(var(--unit) * 13.514 + 8px); height: calc(var(--unit) * 4 + 8px); margin: 0 auto; }
+    .key, .ghost, .enc {
+      position: absolute; width: calc(var(--unit) - var(--gap)); height: calc(var(--unit) - var(--gap));
+      border-radius: 10px; border: 1px solid var(--key-edge); background: var(--key);
+      display: flex; flex-direction: column; justify-content: space-between; padding: 7px 6px 6px; user-select: none;
+    }
+    .key.trans { background: var(--trans); color: #6c7280; border-style: dashed; }
+    .key.none { background: transparent; border-style: dashed; border-color: #3a4150; color: #5a6170; }
+    .key.kind-mod .hold { color: var(--mod); }
+    .key.kind-layer .hold { color: var(--layer); }
+    .key.kind-ime .tap { color: var(--ime); }
+    .key.kind-num .tap { color: var(--num); }
+    .hold { font-size: 10px; line-height: 1.1; color: var(--hold); min-height: 12px; }
+    .tap { font-size: 13px; font-weight: 620; line-height: 1.15; }
+    .enc {
+      align-items: center; justify-content: center; border-radius: 50%;
+      background: #1a1d24; border-color: #4a5364; color: var(--muted); font-size: 10px; padding: 0;
+    }
+    .enc i {
+      display: block; width: 28px; height: 28px; border-radius: 50%;
+      border: 2px solid #6a7384; margin: 0 auto 2px;
+      background: conic-gradient(from 0deg, #2a303a, #4a5364, #2a303a);
+    }
+    .ghost {
+      background: transparent; border: 1.5px dashed #3a4150; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 11px;
+    }
+    .ball {
+      width: 46px; height: 46px; border-radius: 50%; border: 1.5px solid #4a5364;
+      background: radial-gradient(circle at 35% 30%, #3a414e, #1a1d24 70%); margin-bottom: 4px;
+    }
+    .note { max-width: 980px; margin: 18px auto 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .hud-meta { display: none; }
+    html.hud, html.hud body { background: transparent; }
+    html.hud body, html.embed body,
+    body.embed, body.hud {
+      min-height: 0;
+      padding: 8px;
+    }
+    html.hud header, html.embed header,
+    html.hud .note, html.embed .note,
+    body.embed header, body.hud header,
+    body.embed .note, body.hud .note { display: none; }
+    html.hud .toolbar, body.hud .toolbar { display: none; }
+    html.hud .hud-meta, body.hud .hud-meta {
+      display: flex;
+      justify-content: flex-end;
+      max-width: 980px;
+      margin: 0 auto 8px;
+    }
+    body.embed, html.embed { --unit: 44px; --gap: 5px; }
+    body.hud, html.hud { --unit: 38px; --gap: 4px; }
+    body.embed .board-wrap, body.hud .board-wrap {
+      padding: 16px 12px 12px;
+      border-radius: 16px;
+    }
+    body.hud .board-wrap {
+      background: rgba(23, 26, 33, 0.92);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    }
+    .layer-chip {
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #ece8df;
+      color: #0f1115;
+    }
+    body.embed .hold, body.hud .hold { font-size: 9px; min-height: 10px; }
+    body.embed .tap, body.hud .tap { font-size: 11px; }
+    body.embed .key, body.embed .ghost, body.embed .enc,
+    body.hud .key, body.hud .ghost, body.hud .enc { padding: 5px 4px 4px; border-radius: 8px; }
+    body.embed .enc i, body.hud .enc i { width: 18px; height: 18px; }
+    body.embed .ball, body.hud .ball { width: 30px; height: 30px; }
+  </style>
+  <script>
+    (function () {
+      const mode = (location.hash || "").replace("#", "");
+      if (mode === "hud" || mode === "embed") {
+        document.documentElement.classList.add(mode);
+      }
+    })();
+  </script>
+</head>
+<body>
+  <header>
+    <h1>BobTailESC キーマップ</h1>
+    <p class="lede">上が長押し、下がタップ。対になるキーは左右対称です。Space / Enter / ⌫ / Fn をクリックすると、そのレイヤーへ飛びます。</p>
+  </header>
+  <div class="hud-meta"><span class="layer-chip" id="layer-chip">Base</span></div>
+  <div class="toolbar">
+    <div class="tabs" id="tabs"></div>
+    <div style="display:flex;gap:6px">
+      <button class="os" id="os-mac" aria-pressed="true">macOS</button>
+      <button class="os" id="os-win" aria-pressed="false">Windows</button>
+    </div>
+  </div>
+  <div class="board-wrap"><div class="board" id="board"></div></div>
+  <p class="note" id="note"></p>
+  <p class="note">
+    <span class="legend">
+      <span><i class="sw" style="background:#c8a36a"></i>長押し</span>
+      <span><i class="sw" style="background:#d4b483"></i>テンキー / Fキー（同位置）</span>
+      <span><i class="sw" style="background:#e6a0b8"></i>英数 / かな</span>
+      <span><i class="sw" style="background:#2a2e38;outline:1px dashed #6c7280"></i>透過</span>
+    </span>
+  </p>
+<script>
+const LAYOUT = [
+  [0,0],[1.003,0],[2.005,0],[3.008,0],[4.011,0],
+  [8.504,0],[9.506,0],[10.509,0],[11.512,0],[12.514,0],
+  [0,1],[1.003,1],[2.005,1],[3.008,1],[4.011,1],[5.015,1],
+  [7.501,1],[8.504,1],[9.506,1],[10.509,1],[11.512,1],[12.514,1],
+  [0,2],[1.003,2],[2.005,2],[3.008,2],[4.011,2],[5.013,2],
+  [7.501,2],[8.504,2],[9.506,2],[10.509,2],[11.512,2],[12.514,2],
+  [0,3],[1.003,3],[2.005,3],[3.008,3],[4.011,3],[5.013,3],
+  [7.501,3],[8.504,3],[12.514,3],
+];
+const ENC = 15;
+
+const T = (tap, extra = {}) => ({ tap, hold: "", kind: "", ...extra });
+const H = (tap, hold, kind = "layer", extra = {}) => ({ tap, hold, kind, ...extra });
+const TR = { tap: "↓", hold: "", kind: "trans", trans: true };
+const NO = { tap: "", hold: "", kind: "none", none: true };
+
+const BASE_MAC = [
+  T("Q"), T("W"), T("E"), T("R"), T("T"),
+  T("Y"), T("U"), T("I"), T("O"), T("P"),
+  H("A", "⌘", "mod"), H("S", "⌥", "mod"), H("D", "⌃", "mod"), H("F", "⇧", "mod"), T("G"),
+  NO,
+  H("", "Fn", "layer", { goto: "fn" }), T("H"), H("J", "⇧", "mod"), H("K", "⌃", "mod"), H("L", "⌥", "mod"), H(";", "⌘", "mod"),
+  T("Z"), T("X"), T("C"), T("V"), T("B"),
+  T("Esc"),
+  T("⌫"), T("N"), T("M"), T(","), T("."), T("/"),
+  T("Tab"), T("⌃", { kind: "mod" }), T("⌘", { kind: "mod" }),
+  H("", "Gesture", "layer", { goto: "gesture" }), H("英数", "L⌥", "ime"), H("Space", "Num", "layer", { goto: "num" }),
+  H("Enter", "Sym", "layer", { goto: "sym" }), H("かな", "R⌥", "ime"),
+  NO,
+];
+
+const BASE_WIN = BASE_MAC.map((k, i) => ({
+  10: H("A", "Ctrl", "mod"),
+  12: H("D", "Win", "mod"),
+  19: H("K", "Win", "mod"),
+  21: H(";", "Ctrl", "mod"),
+  35: T("Win", { kind: "mod" }),
+  36: T("Ctrl", { kind: "mod" }),
+}[i] || k));
+
+const NUM_MAC = [
+  T(".", { kind: "num" }), T("7", { kind: "num" }), T("8", { kind: "num" }), T("9", { kind: "num" }), T("+"),
+  T("行頭"), T("("), T("↑"), T(")"), T("行末"),
+  T("/", { kind: "num" }), T("4", { kind: "num" }), T("5", { kind: "num" }), T("6", { kind: "num" }), T("-"), NO,
+  TR, T("{"), T("←"), T("↓"), T("→"), T("}"),
+  T("0", { kind: "num" }), T("1", { kind: "num" }), T("2", { kind: "num" }), T("3", { kind: "num" }), T("="), TR,
+  T("Del"), T("["), T("]"), T("単語←"), T("単語→"), T("\\"),
+  TR, TR, TR, TR, TR, TR, TR, TR, TR,
+];
+
+const NUM_WIN = NUM_MAC.map((k, i) => ({
+  5: T("行頭"), 9: T("行末"), 31: T("単語←"), 32: T("単語→"),
+}[i] || k));
+
+const SYM = [
+  T("!"), T("@"), T("#"), T("$"), T("%"),
+  T("^"), T("&"), T("*"), T("~"), T("?"),
+  T("'"), T('"'), T("`"), T("|"), T("_"), NO, TR,
+  T(":"), T(";"), T("<"), T(">"), T("+"),
+  NO, NO, NO, NO, NO, TR, T("Del"), NO, NO, NO, NO, NO,
+  TR, TR, TR, TR, TR, TR, TR, TR, TR,
+];
+
+const GEST_MAC = [
+  NO, TR, TR, TR, TR,
+  T("範囲SS"), T("戻る"), T("Mission"), T("進む"), T("SS"),
+  TR, TR, TR, TR, TR, NO, TR,
+  T("窓切替"), T("Desk←"), T("Exposé"), T("Desk→"), T("アプリ"),
+  TR, TR, TR, TR, TR, TR, TR,
+  T("隠す"), T("最小化"), T("フルスク"), TR, TR,
+  TR, TR, TR, TR, TR, TR, TR, TR, TR,
+];
+
+const GEST_WIN = [
+  NO, TR, TR, TR, TR,
+  T("範囲SS"), T("戻る"), T("タスク"), T("進む"), T("PrtSc"),
+  TR, TR, TR, TR, TR, NO, TR,
+  TR, T("Desk←"), T("デスクトップ"), T("Desk→"), T("Alt+Tab"),
+  TR, TR, TR, TR, TR, TR, TR,
+  T("最小化"), T("最大化"), T("F11"), TR, TR,
+  TR, TR, TR, TR, TR, TR, TR, TR, TR,
+];
+
+const FN = [
+  T("BT0"), T("F7", { kind: "num" }), T("F8", { kind: "num" }), T("F9", { kind: "num" }), T("F12", { kind: "num" }),
+  T("輝度−"), T("輝度＋"), T("前曲"), T("再生"), T("次曲"),
+  T("BT1"), T("F4", { kind: "num" }), T("F5", { kind: "num" }), T("F6", { kind: "num" }), T("F11", { kind: "num" }), NO, TR,
+  T("ミュート"), T("音量−"), T("音量＋"), T("PrtSc"), T("NumLk"),
+  T("BT2"), T("F1", { kind: "num" }), T("F2", { kind: "num" }), T("F3", { kind: "num" }), T("F10", { kind: "num" }), TR, T("CapsW"),
+  T("Mac"), T("Win"), T("出力切替"), T("BT削除"), T("ブート"),
+  TR, TR, TR, TR, TR, TR, TR, TR, TR,
+];
+
+const MOUSE = [
+  TR, TR, TR, TR, TR, TR, TR, TR, TR, TR,
+  TR, TR, TR, TR, TR, NO, TR,
+  T("戻る"), T("左クリック"), H("中クリック", "Scroll"), T("右クリック"), T("進む"),
+  TR, TR, TR, TR, TR, TR, TR, TR, TR, TR, TR, TR,
+  TR, TR, TR, H("", "Gesture", "layer", { goto: "gesture" }), TR, TR, TR, TR, TR,
+];
+
+const NOTES = {
+  base: "親指の内側4つが 英数 / Space / Enter / かな。英数・かなは長押しで L⌥ / R⌥。その左隣（旧英数）が Gesture。",
+  num: "左手テンキー。. と / は Q と A。最下行の外側は透過のままです。* は Sym 層。⌫ 位置は Delete。",
+  fn: "F1–F9 は数字と同じ位置。F12/F11/F10 は +/−/= の列。BT0–2 は Q/A/Z。Caps Word は ⌫ の位置。最下行は使いません。",
+  sym: "Num に無い記号。* もここにあります。ここの ⌫ 位置も Delete です。",
+  gesture: "旧英数を押している間、ボールは純正トラックパッドの 3/4 本指スワイプと同じ動きです。上=Mission Control、下=App Exposé、左右=デスクトップ切替。離すと確定します。",
+  mouse: "ボール操作中のクリックはホーム段。中クリックはタップでクリック、長押しでスクロール。Gesture は旧英数の位置（この層でも同じキー）です。",
+  scroll: "中クリック長押し中。ボールがスクロールになります。専用の Scroll キーはありません。",
+};
+
+const LAYERS = [
+  { id: "base", name: "Base" },
+  { id: "num", name: "Num+Nav" },
+  { id: "fn", name: "Fn (=数字の位置)" },
+  { id: "sym", name: "Sym" },
+  { id: "gesture", name: "Gesture" },
+  { id: "mouse", name: "Mouse" },
+];
+
+let UNIT = 62;
+let current = "base";
+let os = "mac";
+
+function applyAppearance(mode) {
+  const resolved = (mode === "embed" || mode === "hud") ? mode : "page";
+  document.documentElement.classList.remove("page", "embed", "hud");
+  document.body.classList.remove("page", "embed", "hud");
+  document.documentElement.classList.add(resolved);
+  document.body.classList.add(resolved);
+  UNIT = resolved === "hud" ? 38 : resolved === "embed" ? 44 : 62;
+}
+
+applyAppearance((location.hash || "").replace("#", ""));
+
+function layerLabel(id) {
+  if (id === "scroll") return "Scroll";
+  const found = LAYERS.find((item) => item.id === id);
+  return found ? found.name : id;
+}
+
+function keysFor(id) {
+  const win = os === "win";
+  if (id === "base") return win ? BASE_WIN : BASE_MAC;
+  if (id === "num") return win ? NUM_WIN : NUM_MAC;
+  if (id === "sym") return SYM;
+  if (id === "gesture") return win ? GEST_WIN : GEST_MAC;
+  if (id === "fn") return FN;
+  if (id === "mouse" || id === "scroll") return MOUSE;
+}
+
+function render() {
+  const tabs = document.getElementById("tabs");
+  tabs.innerHTML = "";
+  for (const layer of LAYERS) {
+    const b = document.createElement("button");
+    b.className = "tab";
+    b.textContent = layer.name;
+    b.setAttribute("aria-selected", layer.id === current ? "true" : "false");
+    b.addEventListener("click", () => { current = layer.id; render(); });
+    tabs.appendChild(b);
+  }
+
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  keysFor(current).forEach((key, i) => {
+    const [x, y] = LAYOUT[i];
+    if (i === ENC) {
+      const enc = document.createElement("div");
+      enc.className = "enc";
+      enc.style.left = (x * UNIT) + "px";
+      enc.style.top = (y * UNIT) + "px";
+      enc.innerHTML = "<i></i>enc";
+      enc.title = "ロータリーエンコーダ（キーではない）";
+      board.appendChild(enc);
+      return;
+    }
+    const div = document.createElement("div");
+    div.className = "key";
+    if (key.trans) div.classList.add("trans");
+    if (key.none) div.classList.add("none");
+    if (key.kind) div.classList.add("kind-" + key.kind);
+    div.style.left = (x * UNIT) + "px";
+    div.style.top = (y * UNIT) + "px";
+    div.innerHTML = `<div class="hold">${key.hold || ""}</div><div class="tap">${key.tap || ""}</div>`;
+    if (key.goto) {
+      div.style.cursor = "pointer";
+      div.addEventListener("click", () => { current = key.goto; render(); });
+    }
+    board.appendChild(div);
+  });
+
+  const ghost = document.createElement("div");
+  ghost.className = "ghost";
+  ghost.style.left = (10.0 * UNIT) + "px";
+  ghost.style.top = (3 * UNIT) + "px";
+  ghost.style.width = (1.8 * UNIT) + "px";
+  ghost.innerHTML = `<div class="ball"></div>trackball`;
+  board.appendChild(ghost);
+
+  document.getElementById("note").textContent = NOTES[current] || "";
+  document.getElementById("os-mac").setAttribute("aria-pressed", os === "mac" ? "true" : "false");
+  document.getElementById("os-win").setAttribute("aria-pressed", os === "win" ? "true" : "false");
+  const chip = document.getElementById("layer-chip");
+  if (chip) chip.textContent = layerLabel(current);
+}
+
+document.getElementById("os-mac").addEventListener("click", () => { os = "mac"; render(); });
+document.getElementById("os-win").addEventListener("click", () => { os = "win"; render(); });
+render();
+
+window.setBobTailAppearance = function(mode) {
+  applyAppearance(mode);
+  render();
+};
+
+window.setBobTailState = function(layer, osName) {
+  if (typeof layer === "string" && (LAYERS.some((item) => item.id === layer) || layer === "scroll")) {
+    current = layer;
+  }
+  if (osName === "win" || osName === "Windows") os = "win";
+  if (osName === "mac" || osName === "macOS") os = "mac";
+  render();
+};
+</script>
+</body>
+</html>
