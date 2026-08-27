@@ -1,7 +1,5 @@
 #include "BobTail.dtsi"
 #include <dt-bindings/zmk/keys.h>
-#include <input/processors.dtsi>
-#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 &default_transform {
     col-offset = <6>;
@@ -18,19 +16,9 @@
 };
 
 / {
-    /* Finder は水平ホイールをほぼ受け付けず、未対応だと警告音が連打される。
-       スクロール層の横方向は縦スクロールに足して、音が出ないようにする */
-    zip_hwheel_as_wheel: zip_hwheel_as_wheel {
-        compatible = "zmk,input-processor-code-mapper";
-        #input-processor-cells = <0>;
-        type = <INPUT_EV_REL>;
-        map = <INPUT_REL_HWHEEL INPUT_REL_WHEEL>;
-    };
-
     trackball_listener {
         compatible = "zmk,input-listener";
         device = <&trackball>;
-        input-processors = <&zip_hwheel_as_wheel>;
     };
 };
 

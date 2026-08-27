@@ -41,6 +41,13 @@ config PMW3610_SCROLL_TICK
 	int "PMW3610's required ticks to produce a scroll report"
 	default 20
 
+config PMW3610_SCROLL_LOCK_IDLE_MS
+	int "Release scroll axis lock after this much idle time"
+	default 150
+	help
+	  After the first dominant axis (vertical or horizontal) is chosen,
+	  leftover motion on the other axis is ignored until the ball rests.
+
 choice
 	prompt "Select PMW3610's polling rate"
 	default PMW3610_POLLING_RATE_250

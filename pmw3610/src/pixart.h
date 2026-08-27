@@ -25,6 +25,7 @@ struct pixart_data {
     uint32_t curr_cpi;
     int32_t scroll_delta_x;
     int32_t scroll_delta_y;
+    int8_t scroll_axis_lock;
     int32_t ball_action_delta_x;
     int32_t ball_action_delta_y;
     int ball_action_pending_idx;

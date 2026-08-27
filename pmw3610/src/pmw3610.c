@@ -658,6 +658,23 @@ static void ball_action_cancel(struct pixart_data *data) {
     data->ball_action_delta_y = 0;
 }
 
+static void scroll_axis_reset(struct pixart_data *data) {
+    data->scroll_delta_x = 0;
+    data->scroll_delta_y = 0;
+    data->scroll_axis_lock = 0;
+}
+
+static void scroll_unlock(struct k_timer *timer) {
+    ARG_UNUSED(timer);
+    const struct device *dev = ball_action_sensor_dev;
+    if (!dev) {
+        return;
+    }
+    scroll_axis_reset(dev->data);
+}
+
+K_TIMER_DEFINE(scroll_unlock_timer, scroll_unlock, NULL);
+
 static int pmw3610_report_data(const struct device *dev) {
     struct pixart_data *data = dev->data;
     uint8_t buf[PMW3610_BURST_SIZE];
@@ -673,6 +690,10 @@ static int pmw3610_report_data(const struct device *dev) {
     if (input_mode_changed && data->curr_mode == BALL_ACTION && input_mode != BALL_ACTION) {
         ball_action_cancel(data);
     }
+    if (input_mode_changed && data->curr_mode == SCROLL && input_mode != SCROLL) {
+        k_timer_stop(&scroll_unlock_timer);
+        scroll_axis_reset(data);
+    }
     switch (input_mode) {
     case MOVE:
         set_cpi_if_needed(dev, CONFIG_PMW3610_CPI);
@@ -681,8 +702,7 @@ static int pmw3610_report_data(const struct device *dev) {
     case SCROLL:
         set_cpi_if_needed(dev, CONFIG_PMW3610_CPI);
         if (input_mode_changed) {
-            data->scroll_delta_x = 0;
-            data->scroll_delta_y = 0;
+            scroll_axis_reset(data);
         }
         dividor = 1; // this should be handled with the ticks rather than dividors
         break;
@@ -793,21 +813,42 @@ static int pmw3610_report_data(const struct device *dev) {
             input_report_rel(dev, INPUT_REL_X, x, false, K_FOREVER);
             input_report_rel(dev, INPUT_REL_Y, y, true, K_FOREVER);
         } else if (input_mode == SCROLL) {
-            data->scroll_delta_x += x;
-            data->scroll_delta_y += y;
-            if (abs(data->scroll_delta_y) > CONFIG_PMW3610_SCROLL_TICK) {
-                input_report_rel(dev, INPUT_REL_WHEEL,
-                                 data->scroll_delta_y > 0 ? PMW3610_SCROLL_Y_NEGATIVE : PMW3610_SCROLL_Y_POSITIVE,
-                                 true, K_FOREVER);
-                data->scroll_delta_x = 0;
-                data->scroll_delta_y = 0;
-            } else if (abs(data->scroll_delta_x) > CONFIG_PMW3610_SCROLL_TICK) {
-                input_report_rel(dev, INPUT_REL_HWHEEL,
-                                 data->scroll_delta_x > 0 ? PMW3610_SCROLL_X_NEGATIVE : PMW3610_SCROLL_X_POSITIVE,
-                                 true, K_FOREVER);
-                data->scroll_delta_x = 0;
-                data->scroll_delta_y = 0;
+            /* Lock to the first clear axis so leftover diagonal motion does
+             * not spray horizontal wheel ticks (Finder beeps on those). */
+            if (data->scroll_axis_lock == 1) {
+                data->scroll_delta_y += y;
+            } else if (data->scroll_axis_lock == 2) {
+                data->scroll_delta_x += x;
+            } else {
+                data->scroll_delta_x += x;
+                data->scroll_delta_y += y;
+                const int32_t ax = abs(data->scroll_delta_x);
+                const int32_t ay = abs(data->scroll_delta_y);
+                if (ay > CONFIG_PMW3610_SCROLL_TICK && ay >= ax) {
+                    data->scroll_axis_lock = 1;
+                } else if (ax > CONFIG_PMW3610_SCROLL_TICK && ax > (ay * 3) / 2) {
+                    data->scroll_axis_lock = 2;
+                }
             }
+
+            if (data->scroll_axis_lock == 1 &&
+                abs(data->scroll_delta_y) > CONFIG_PMW3610_SCROLL_TICK) {
+                input_report_rel(dev, INPUT_REL_WHEEL,
+                                 data->scroll_delta_y > 0 ? PMW3610_SCROLL_Y_NEGATIVE
+                                                          : PMW3610_SCROLL_Y_POSITIVE,
+                                 true, K_FOREVER);
+                data->scroll_delta_y = 0;
+            } else if (data->scroll_axis_lock == 2 &&
+                       abs(data->scroll_delta_x) > CONFIG_PMW3610_SCROLL_TICK) {
+                input_report_rel(dev, INPUT_REL_HWHEEL,
+                                 data->scroll_delta_x > 0 ? PMW3610_SCROLL_X_NEGATIVE
+                                                          : PMW3610_SCROLL_X_POSITIVE,
+                                 true, K_FOREVER);
+                data->scroll_delta_x = 0;
+            }
+
+            k_timer_start(&scroll_unlock_timer, K_MSEC(CONFIG_PMW3610_SCROLL_LOCK_IDLE_MS),
+                          K_NO_WAIT);
         } else if (input_mode == BALL_ACTION) {
             data->ball_action_delta_x += x;
             data->ball_action_delta_y += y;
