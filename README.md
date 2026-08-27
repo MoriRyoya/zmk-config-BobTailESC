@@ -15,7 +15,7 @@ BobTail / BobTailESC 用の ZMK ファームウェアリポジトリです。
 | `config/BobTail.keymap` | キーマップ本体 |
 | `config/boards/shields/Test/` | シールド定義（トラックボール・バッテリー等の設定） |
 | `docs/keymap.md` | **キーマップの説明書。まずはここを読んでください** |
-| `tools/macos/BobTailBar/` | メニューバー常駐アプリ（レイヤー表示・左右バッテリー・ジェスチャ） |
+| `tools/macos/BobTailBar/` | メニューバー常駐アプリ（レイヤー表示・左右バッテリー） |
 | `tools/check_keymap.py` | キーマップ編集後の自己チェック |
 
 ---
@@ -29,7 +29,7 @@ BobTail / BobTailESC 用の ZMK ファームウェアリポジトリです。
 - **Mac / Windows の切り替え**。⌘ と Ctrl の位置が入れ替わり、
   「行頭」「単語移動」などの意味キーも OS ごとに実体が差し替わる
 - **左右のバッテリー残量**を個別に % で確認できる
-- **トラックボール + キー**で Mission Control やデスクトップ切り替え
+- **トラックボール + Gesture** で Mission Control やデスクトップ切り替え（変換は本体。アプリ不要）
 
 詳細は [docs/keymap.md](docs/keymap.md) を参照してください。
 

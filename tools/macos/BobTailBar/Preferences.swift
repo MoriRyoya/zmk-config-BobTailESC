@@ -55,8 +55,8 @@ final class Preferences {
         set { defaults.set(newValue, forKey: "menubarFontSize"); ping() }
     }
 
-    var gestureEnabled: Bool {
-        get { defaults.object(forKey: "gestureEnabled") as? Bool ?? true }
+        var gestureEnabled: Bool {
+            get { defaults.object(forKey: "gestureEnabled") as? Bool ?? false }
         set { defaults.set(newValue, forKey: "gestureEnabled"); ping() }
     }
 

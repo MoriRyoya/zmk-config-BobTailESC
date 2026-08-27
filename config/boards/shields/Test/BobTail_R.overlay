@@ -1,4 +1,5 @@
 #include "BobTail.dtsi"
+#include <dt-bindings/zmk/keys.h>
 
 &default_transform {
     col-offset = <6>;
@@ -57,10 +58,29 @@
         reg = <0>;
         spi-max-frequency = <2000000>;
         irq-gpios = <&gpio0 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        /* BobTail.keymap のレイヤー番号と対応 (MOUSE=1 / SCRL=2)。
+        /* BobTail.keymap のレイヤー番号と対応 (MOUSE=1 / SCRL=2 / GEST=6 / GESTW=8)。
            NAV や NUM より低い番号にしておくことで、レイヤーを押している
            最中にボールへ触れてもキー割り当てが上書きされない */
         automouse-layer = <1>;
         scroll-layers = <2>;
+
+        /* Gesture 押し中はカーソルを動かさず、フリックをショートカットにする。
+           bindings の順はドライバ固定: +X / -X / -Y / +Y
+           （画面上の右 / 左 / 上 / 下 に合わせてある） */
+        gest_mac {
+            layers = <6>;
+            tick = <90>;
+            wait-ms = <280>;
+            tap-ms = <20>;
+            bindings = <&kp LC(RIGHT) &kp LC(LEFT) &kp LC(UP) &kp LC(DOWN)>;
+        };
+
+        gest_win {
+            layers = <8>;
+            tick = <90>;
+            wait-ms = <280>;
+            tap-ms = <20>;
+            bindings = <&kp LC(LG(RIGHT)) &kp LC(LG(LEFT)) &kp LG(TAB) &kp LG(D)>;
+        };
     };
 };

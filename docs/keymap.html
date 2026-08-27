@@ -76,7 +76,12 @@
     .legend span { display: inline-flex; align-items: center; gap: 6px; }
     .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
     .hud-meta { display: none; }
-    html.hud, html.hud body { background: transparent; }
+    html.hud, html.hud body {
+      background: transparent;
+      min-height: 0 !important;
+      height: 100%;
+      overflow: hidden;
+    }
     html.hud body, html.embed body,
     body.embed, body.hud {
       min-height: 0;
@@ -259,7 +264,7 @@ const NOTES = {
   num: "左手テンキー。. と / は Q と A。最下行の外側は透過のままです。* は Sym 層。⌫ 位置は Delete。",
   fn: "F1–F9 は数字と同じ位置。F12/F11/F10 は +/−/= の列。BT0–2 は Q/A/Z。Caps Word は ⌫ の位置。最下行は使いません。",
   sym: "Num に無い記号。* もここにあります。ここの ⌫ 位置も Delete です。",
-  gesture: "旧英数を押している間、ボールは純正トラックパッドの 3/4 本指スワイプと同じ動きです。上=Mission Control、下=App Exposé、左右=デスクトップ切替。離すと確定します。",
+  gesture: "Gesture 押しながらボールをフリック。上=Mission Control、下=App Exposé、左右=デスクトップ切替。変換はキーボード本体で行うので、BobTailBar なしでも動きます。",
   mouse: "ボール操作中のクリックはホーム段。中クリックはタップでクリック、長押しでスクロール。Gesture は旧英数の位置（この層でも同じキー）です。",
   scroll: "中クリック長押し中。ボールがスクロールになります。専用の Scroll キーはありません。",
 };
