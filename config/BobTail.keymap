@@ -9,7 +9,7 @@
  *  34  35  36  37  38  39             40  41    (ball)    42
  *              ~~~~~~~~~~~~~~~~       ~~~~~~
  *              打ちやすい親指 4+Gesture     右親指 2 個
- *              (34/35/36 は押しづらいのでレイヤーでは使わない。42 は Fn)
+ *              (34/35/36 は押しづらいのでレイヤーでは使わない。?/42 が Fn)
  *
  * 設計方針
  *   - 15 番はエンコーダなので割り当てない (bindings 上は &none)
@@ -45,7 +45,7 @@
 #define LAYER_INDICATOR 1
 
 #define IND_NUM  F13
-#define IND_SYM  F15
+#define IND_SYM  F21   /* F14/F15 は macOS の輝度キーなので使わない */
 #define IND_SCRL F16
 #define IND_GEST F17
 #define IND_FN   F18
@@ -57,6 +57,7 @@
 #define HOLD_SYM   &ind_sym
 #define HOLD_SCRL  &ind_scrl
 #define HOLD_GEST  &ind_gest
+#define HOLD_FN    &ind_fn
 #define MO_FN      &ind_fn
 #define TOG_NUM    &num_lock
 #define OS_MAC     &os_mac
@@ -66,6 +67,7 @@
 #define HOLD_SYM   &mo
 #define HOLD_SCRL  &mo
 #define HOLD_GEST  &mo
+#define HOLD_FN    &mo
 #define MO_FN      &mo FN
 #define TOG_NUM    &tog NUM
 #define OS_MAC     &to BASE
@@ -137,6 +139,16 @@
             tapping-term-ms = <200>;
             quick-tap-ms = <175>;
             bindings = <HOLD_GEST>, <&kp>;
+        };
+
+        /* ?: タップで ?、長押しで Fn */
+        lt_fn: layer_tap_fn {
+            compatible = "zmk,behavior-hold-tap";
+            #binding-cells = <2>;
+            flavor = "balanced";
+            tapping-term-ms = <200>;
+            quick-tap-ms = <175>;
+            bindings = <HOLD_FN>, <&kp>;
         };
 
         /* 英数 / かな: タップで IME、長押しで LALT / RALT */
@@ -284,7 +296,7 @@
          *  そのすぐ外側: Gesture (旧英数の位置)
          *
          *  Q     W     E     R     T   |   Y     U     I     O     P
-         *  A/⌘  S/⌥  D/⌃  F/⇧   G  enc|  ?   H   J/⇧ K/⌃ L/⌥  ;/⌘
+         *  A/⌘  S/⌥  D/⌃  F/⇧   G  enc|  ?/Fn H   J/⇧ K/⌃ L/⌥  ;/⌘
          *  Z     X     C     V     B  Esc| ⌫    N     M     ,     .     /
          * Tab   ⌃    ⌘   GES  英数/⌥  Spc| Ent  かな/⌥                    Fn
          * ============================================================ */
@@ -292,7 +304,7 @@
             display-name = "Base";
             bindings = <
 &kp Q         &kp W         &kp E          &kp R          &kp T                                          &kp Y      &kp U         &kp I         &kp O         &kp P
-&hml LGUI A   &hml LALT S   &hml LCTRL D   &hml LSHFT F   &kp G       &none                 &kp QMARK     &kp H      &hmr RSHFT J  &hmr RCTRL K  &hmr RALT L   &hmr RGUI SEMI
+&hml LGUI A   &hml LALT S   &hml LCTRL D   &hml LSHFT F   &kp G       &none                 &lt_fn FN QMARK &kp H      &hmr RSHFT J  &hmr RCTRL K  &hmr RALT L   &hmr RGUI SEMI
 &kp Z         &kp X         &kp C          &kp V          &kp B       &kp ESC               &kp BSPC      &kp N      &kp M         &kp COMMA     &kp DOT       &kp SLASH
 &kp TAB       &kp LCTRL     &kp LGUI       HOLD_GEST      &ime_mod LALT LANG2   &lt_num NUM SPACE     &lt_sym SYM ENTER &ime_mod RALT LANG1                              MO_FN
             >;
@@ -338,7 +350,7 @@
          * 4: NUM — Space 長押し。左手がテンキー、右手が矢印と括弧
          *
          *   .   7   8   9   +   |  行頭   (    ↑    )   行末
-         *   /   4   5   6   -  enc|  ?    {    ←    ↓    →    }
+         *   /   4   5   6   -  enc|  ?/Fn {    ←    ↓    →    }
          *   0   1   2   3   =  Esc| Del   [    ]   単語← 単語→  \
          *
          * 最下行の外側 (Tab/⌃/⌘) は使わない。* は Sym 層
@@ -403,7 +415,8 @@
         };
 
         /* ============================================================
-         * 9: FN — 数字と同一位置に F1–F9。F12/F11/F10 は +/−/= の列で上ほど大きい
+         * 9: FN — ? 長押し、右下 42、または Space+Enter。
+         *    数字と同一位置に F1–F9。F12/F11/F10 は +/−/= の列で上ほど大きい
          *
          *  BT0  F7  F8  F9  F12 | 輝度- 輝度+ 前曲  再生  次曲
          *  BT1  F4  F5  F6  F11 | ミュート 音量- 音量+ PrtSc NumLk

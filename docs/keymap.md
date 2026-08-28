@@ -23,7 +23,7 @@ macOS をメインに使いつつ、実験室では Windows も触る人向け�
 - `15` はエンコーダで、キーはありません（キーマップ上は `&none`）。
 - `27` と `16 / 28` は人差し指を内側に伸ばして押す列です。
 - 右手側の `41` の右にトラックボールがあります。
-- 最下行の `34 / 35 / 36` は押しづらいので、レイヤーでは使いません。`42` は Fn です。
+- 最下行の `34 / 35 / 36` は押しづらいので、レイヤーでは使いません。`16`（`?` 長押し）と `42` が Fn です。
 
 ---
 
@@ -52,7 +52,7 @@ macOS をメインに使いつつ、実験室では Windows も触る人向け�
 | 6 | Gesture | 旧英数の位置（`37`）押し | ボールのフリックをショートカットに（本体で変換） |
 | 7 | Num(Win) | Win + Num 自動 | 行頭・単語移動の Windows 版 |
 | 8 | Gest(Win) | Win + Gesture 自動 | Gesture の Windows 版 |
-| 9 | Fn | 右下（`42`）、または Space+Enter | F キー（数字と同位置）・音量・BT・OS 切替 |
+| 9 | Fn | `?` 長押し、右下（`42`）、または Space+Enter | F キー（数字と同位置）・音量・BT・OS 切替 |
 
 Mouse と Scroll をあえて小さい番号にしてあるので、カーソル層を押している最中に
 うっかりボールへ触れても矢印がクリックに化けません。
@@ -63,7 +63,7 @@ Mouse と Scroll をあえて小さい番号にしてあるので、カーソル
 
 ```
  Q     W     E     R     T                Y     U     I     O     P
- A     S     D     F     G    enc     ?   H     J     K     L     ;
+ A     S     D     F     G    enc   ?/Fn  H     J     K     L     ;
  Z     X     C     V     B    Esc    ⌫    N     M     ,     .     /
  Tab   ⌃     ⌘    GES  英数  Spc    Ent  かな                 Fn
 ```
@@ -76,7 +76,7 @@ Mouse と Scroll をあえて小さい番号にしてあるので、カーソル
 | --- | --- | --- |
 | `A` `S` `D` `F` | a s d f | ⌘ / ⌥ / ⌃ / ⇧ |
 | `J` `K` `L` `;` | j k l ; | ⇧ / ⌃ / ⌥ / ⌘ |
-| `16` | `?` | — |
+| `16` | `?` | Fn 層 |
 | `42` | — | Fn 層 |
 | `37` | — | Gesture 層 |
 | `38` | 英数 | L⌥ |
@@ -125,7 +125,7 @@ Windows モードでは行頭・行末・単語移動だけ差し替わります
 
 ---
 
-## 6. Fn 層（右下 `42`、または Space + Enter）
+## 6. Fn 層（`?` 長押し、右下 `42`、または Space + Enter）
 
 数字と同一位置に F キーを置いてあります。
 
@@ -218,6 +218,6 @@ python3 tools/check_keymap.py
 | --- | --- |
 | ホームロー修飾キーの効きを変える | `hml` / `hmr` の `tapping-term-ms`、`require-prior-idle-ms` |
 | ホームロー修飾キーをやめる | Base 層の `&hml LGUI A` などを `&kp A` に置き換える |
-| レイヤー通知（F13〜F20）を止める | 先頭の `#define LAYER_INDICATOR 1` を `0` にする |
+| レイヤー通知（F13 / F16–F21）を止める | 先頭の `#define LAYER_INDICATOR 1` を `0` にする |
 | エンコーダの割り当て | 各レイヤーの `sensor-bindings` |
 | トラックボールの感度 | `config/boards/shields/Test/BobTail_R.conf` の `CONFIG_PMW3610_CPI` |

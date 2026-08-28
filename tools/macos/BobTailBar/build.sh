@@ -25,6 +25,7 @@ swiftc -O \
     -framework CoreGraphics \
     -framework WebKit \
     -framework ServiceManagement \
+    -framework IOKit \
     -o "${MACOS_DIR}/${APP_NAME}" \
     main.swift Preferences.swift Windows.swift Gesture.swift
 

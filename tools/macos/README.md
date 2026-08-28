@@ -86,7 +86,7 @@ cd tools/macos/BobTailBar
 | キー | 意味 |
 | --- | --- |
 | F13 | Num+Nav |
-| F15 | Sym |
+| F21 | Sym（F15 は macOS の輝度＋なので使わない） |
 | F16 | Scroll |
 | F17 | Gesture |
 | F18 | Fn |

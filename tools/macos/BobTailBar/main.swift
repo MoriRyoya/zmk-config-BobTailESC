@@ -2,7 +2,8 @@
 //  BobTailBar — BobTailESC 用 macOS メニューバー常駐アプリ
 //
 //  1. 現在のレイヤーをメニューバーにリアルタイム表示する
-//     キーボードは各レイヤーを保持している間 F13〜F18 を押しっぱなしにする。
+//     キーボードは各レイヤーを保持している間 F13 / F16–F18 / F21 を押しっぱなしにする。
+//     F14 / F15 は macOS の輝度キーなので使わない。
 //     本アプリはそれを横取りして表示に変え、他アプリには渡さない。
 //  2. 左右それぞれのバッテリー残量を % で表示する
 //     ZMK が公開する 2 つの Battery Service を CoreBluetooth で直接読む。
@@ -12,12 +13,13 @@
 import AppKit
 import CoreBluetooth
 import CoreGraphics
+import IOKit.hid
 
 // MARK: - キーボードから送られてくる通知キー (macOS の仮想キーコード)
 
 enum IndicatorKey {
     static let num: Int64 = 105     // F13  Num+Nav
-    static let sym: Int64 = 113     // F15
+    static let sym: Int64 = 144     // F21  (F15 は macOS の輝度＋)
     static let scroll: Int64 = 106  // F16
     static let gesture: Int64 = 64  // F17
     static let fn: Int64 = 79       // F18
@@ -25,6 +27,20 @@ enum IndicatorKey {
     static let winMode: Int64 = 90  // F20
 
     static let all: Set<Int64> = [num, sym, scroll, gesture, fn, macMode, winMode]
+
+    /// USB HID Keyboard usage → macOS 仮想キーコード
+    static func fromHIDUsage(_ usage: UInt32) -> Int64? {
+        switch usage {
+        case 0x68: return num      // F13
+        case 0x70: return sym      // F21
+        case 0x6B: return scroll   // F16
+        case 0x6C: return gesture  // F17
+        case 0x6D: return fn       // F18
+        case 0x6E: return macMode  // F19
+        case 0x6F: return winMode  // F20
+        default: return nil
+        }
+    }
 }
 
 enum ArrowKey {
@@ -34,16 +50,107 @@ enum ArrowKey {
     static let up: CGKeyCode = 126
 }
 
+/// macOS 仮想キーコード → キーマップ上の物理位置
+enum KeyHighlight {
+    static func indices(codes: Set<Int64>, held: Set<Int64>, layer: String) -> [Int] {
+        var out = Set<Int>()
+        if held.contains(IndicatorKey.num) { out.insert(39) }
+        if held.contains(IndicatorKey.sym) { out.insert(40) }
+        if held.contains(IndicatorKey.gesture) { out.insert(37) }
+        if held.contains(IndicatorKey.fn) { out.insert(16) }
+        if held.contains(IndicatorKey.scroll) { out.insert(19) }
+        for code in codes {
+            for index in map(code, layer: layer) { out.insert(index) }
+        }
+        return out.sorted()
+    }
+
+    private static func map(_ code: Int64, layer: String) -> [Int] {
+        switch layer {
+        case "num":
+            if let found = num[code] { return found }
+        case "fn":
+            if let found = fn[code] { return found }
+        case "sym":
+            if let found = sym[code] { return found }
+        default:
+            break
+        }
+        return base[code] ?? []
+    }
+
+    /// A=0 … など ANSI / JIS
+    private static let base: [Int64: [Int]] = [
+        12: [0], 13: [1], 14: [2], 15: [3], 17: [4],
+        16: [5], 32: [6], 34: [7], 31: [8], 35: [9],
+        0: [10], 1: [11], 2: [12], 3: [13], 5: [14],
+        4: [17], 38: [18], 40: [19], 37: [20], 41: [21],
+        6: [22], 7: [23], 8: [24], 9: [25], 11: [26],
+        53: [27], 51: [28],
+        45: [29], 46: [30], 43: [31], 47: [32], 44: [33],
+        48: [34],
+        59: [12, 35], 62: [19],
+        55: [10, 36], 54: [21],
+        56: [13], 60: [18],
+        58: [11, 38], 61: [20, 41],
+        102: [38], 104: [41],
+        49: [39], 36: [40],
+    ]
+
+    private static let num: [Int64: [Int]] = [
+        47: [0], 65: [0],
+        26: [1], 89: [1],
+        28: [2], 91: [2],
+        25: [3], 92: [3],
+        24: [4], 69: [4],
+        75: [10], 44: [10],
+        21: [11], 86: [11],
+        23: [12], 87: [12],
+        22: [13], 88: [13],
+        27: [14], 78: [14],
+        123: [18],
+        125: [19],
+        124: [20],
+        29: [22], 82: [22],
+        18: [23], 83: [23],
+        19: [24], 84: [24],
+        20: [25], 85: [25],
+        81: [26],
+        117: [28], 51: [28],
+        33: [29],
+        30: [30],
+        42: [33],
+        126: [7],
+    ]
+
+    private static let fn: [Int64: [Int]] = [
+        98: [1], 100: [2], 101: [3], 111: [4],
+        118: [11], 96: [12], 97: [13], 103: [14],
+        122: [23], 120: [24], 99: [25], 109: [26],
+        71: [21],
+    ]
+
+    private static let sym: [Int64: [Int]] = [
+        18: [0], 19: [1], 20: [2], 21: [3], 23: [4],
+        22: [5], 26: [6], 28: [7], 50: [8, 12], 44: [9],
+        39: [10, 11], 42: [13], 27: [14],
+        41: [17, 18], 43: [19], 47: [20], 24: [21],
+        117: [28], 51: [28],
+    ]
+}
+
 // MARK: - 状態
 
 final class KeyboardState {
     static let shared = KeyboardState()
 
     private(set) var held = Set<Int64>()
+    private(set) var pressedCodes = Set<Int64>()
     private(set) var osMode = "macOS"
     var leftBattery: Int?
     var rightBattery: Int?
     var bluetoothStatus = "接続を確認中…"
+    var monitorStatus = "キー監視を開始しています…"
     var gestureEnabled: Bool {
         get { Preferences.shared.gestureEnabled }
         set { Preferences.shared.gestureEnabled = newValue }
@@ -69,6 +176,7 @@ final class KeyboardState {
     }
 
     var onChange: (() -> Void)?
+    var onPressedChange: (() -> Void)?
 
     /// 現在有効なレイヤー名。複数保持しているときはキーマップ側の優先順に合わせる。
     var layerName: String {
@@ -94,25 +202,65 @@ final class KeyboardState {
 
     var isGestureLayerHeld: Bool { held.contains(IndicatorKey.gesture) }
 
+    var pressedIndices: [Int] {
+        KeyHighlight.indices(codes: pressedCodes, held: held, layer: layerId)
+    }
+
     func press(_ key: Int64) {
-        switch key {
-        case IndicatorKey.macMode: osMode = "macOS"
-        case IndicatorKey.winMode: osMode = "Windows"
-        default: held.insert(key)
+        applyOnMain {
+            switch key {
+            case IndicatorKey.macMode: self.osMode = "macOS"
+            case IndicatorKey.winMode: self.osMode = "Windows"
+            default: self.held.insert(key)
+            }
+            self.onChange?()
         }
-        onChange?()
     }
 
     func release(_ key: Int64) {
-        held.remove(key)
-        onChange?()
+        applyOnMain {
+            self.held.remove(key)
+            self.onChange?()
+        }
+    }
+
+    func noteKey(_ code: Int64, down: Bool) {
+        applyOnMain {
+            let changed: Bool
+            if down {
+                changed = self.pressedCodes.insert(code).inserted
+            } else {
+                changed = self.pressedCodes.remove(code) != nil
+            }
+            if changed { self.onPressedChange?() }
+        }
     }
 
     /// イベントタップが一時停止した際などに状態が固まらないようにする
     func clearHeld() {
-        guard !held.isEmpty else { return }
-        held.removeAll()
-        onChange?()
+        applyOnMain {
+            guard !self.held.isEmpty || !self.pressedCodes.isEmpty else { return }
+            self.held.removeAll()
+            self.pressedCodes.removeAll()
+            self.onChange?()
+            self.onPressedChange?()
+        }
+    }
+
+    func setMonitorStatus(_ text: String) {
+        applyOnMain {
+            guard self.monitorStatus != text else { return }
+            self.monitorStatus = text
+            self.onChange?()
+        }
+    }
+
+    private func applyOnMain(_ body: @escaping () -> Void) {
+        if Thread.isMainThread {
+            body()
+        } else {
+            DispatchQueue.main.async(execute: body)
+        }
     }
 }
 
@@ -120,9 +268,35 @@ final class KeyboardState {
 
 final class EventTapMonitor {
     private var tap: CFMachPort?
+    private var hid: IOHIDManager?
+    private var retryTimer: Timer?
     private let gestures = GestureEngine()
 
-    func start() -> Bool {
+    func start() {
+        startHID()
+        startGlobalMonitor()
+        tryStartTap()
+        retryTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+            self?.tryStartTap()
+        }
+        publishStatus()
+    }
+
+    @discardableResult
+    private func tryStartTap() -> Bool {
+        if let tap, CGEvent.tapIsEnabled(tap: tap) {
+            publishStatus()
+            return true
+        }
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: true)
+            if CGEvent.tapIsEnabled(tap: tap) {
+                publishStatus()
+                return true
+            }
+            self.tap = nil
+        }
+
         let mask: CGEventMask =
             (1 << CGEventType.keyDown.rawValue) |
             (1 << CGEventType.keyUp.rawValue) |
@@ -131,7 +305,6 @@ final class EventTapMonitor {
             (1 << CGEventType.rightMouseDragged.rawValue)
 
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -144,6 +317,7 @@ final class EventTapMonitor {
             },
             userInfo: refcon
         ) else {
+            publishStatus()
             return false
         }
 
@@ -151,7 +325,79 @@ final class EventTapMonitor {
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        publishStatus()
         return true
+    }
+
+    private func startGlobalMonitor() {
+        NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            self?.handleNSEvent(event)
+        }
+        NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            self?.handleNSEvent(event)
+            return IndicatorKey.all.contains(Int64(event.keyCode)) ? nil : event
+        }
+    }
+
+    private func startHID() {
+        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        let matching: [[String: Any]] = [[
+            kIOHIDDeviceUsagePageKey as String: kHIDPage_GenericDesktop,
+            kIOHIDDeviceUsageKey as String: kHIDUsage_GD_Keyboard,
+        ]]
+        IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
+        let ctx = Unmanaged.passUnretained(self).toOpaque()
+        IOHIDManagerRegisterInputValueCallback(manager, { context, _, _, value in
+            guard let context else { return }
+            Unmanaged<EventTapMonitor>.fromOpaque(context).takeUnretainedValue().handleHID(value)
+        }, ctx)
+        IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
+        IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        hid = manager
+    }
+
+    private func handleHID(_ value: IOHIDValue) {
+        let element = IOHIDValueGetElement(value)
+        let page = IOHIDElementGetUsagePage(element)
+        let usage = IOHIDElementGetUsage(element)
+        let down = IOHIDValueGetIntegerValue(value) != 0
+        guard page == UInt32(kHIDPage_KeyboardOrKeypad) else { return }
+        guard let key = IndicatorKey.fromHIDUsage(usage) else { return }
+        if down {
+            KeyboardState.shared.press(key)
+        } else {
+            if key == IndicatorKey.gesture { gestures.cancel() }
+            KeyboardState.shared.release(key)
+        }
+    }
+
+    private func handleNSEvent(_ event: NSEvent) {
+        let code = Int64(event.keyCode)
+        if !IndicatorKey.all.contains(code) {
+            if event.type == .keyDown {
+                if !event.isARepeat { KeyboardState.shared.noteKey(code, down: true) }
+            } else {
+                KeyboardState.shared.noteKey(code, down: false)
+            }
+            return
+        }
+        if event.type == .keyDown {
+            if !event.isARepeat { KeyboardState.shared.press(code) }
+        } else {
+            if code == IndicatorKey.gesture { gestures.cancel() }
+            KeyboardState.shared.release(code)
+        }
+    }
+
+    private func publishStatus() {
+        let trusted = AXIsProcessTrusted()
+        if let tap, CGEvent.tapIsEnabled(tap: tap) {
+            KeyboardState.shared.setMonitorStatus("キー監視: オン")
+        } else if trusted {
+            KeyboardState.shared.setMonitorStatus("キー監視: 再接続中…")
+        } else {
+            KeyboardState.shared.setMonitorStatus("キー監視: オフ（アクセシビリティを許可）")
+        }
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -162,35 +408,41 @@ final class EventTapMonitor {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             gestures.finish()
             state.clearHeld()
+            publishStatus()
             return Unmanaged.passUnretained(event)
 
         case .keyDown, .keyUp:
             let code = event.getIntegerValueField(.keyboardEventKeycode)
-            guard IndicatorKey.all.contains(code) else { break }
+            if !IndicatorKey.all.contains(code) {
+                if type == .keyDown {
+                    if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+                        state.noteKey(code, down: true)
+                    }
+                } else {
+                    state.noteKey(code, down: false)
+                }
+                break
+            }
             if type == .keyDown {
-                // オートリピートは無視する
                 if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
                     state.press(code)
                 }
             } else {
                 if code == IndicatorKey.gesture {
-                    gestures.finish()
+                    gestures.cancel()
                 }
                 state.release(code)
             }
-            // 通知用のキーは他アプリへ渡さない
             return nil
 
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
-            guard state.gestureEnabled, state.isGestureLayerHeld else {
-                gestures.finishIfNeeded()
-                break
+            // ファームウェアは Gesture 押し中にカーソルを送らない。
+            // マウス移動が来た = キーはもう離れている。残りジェスチャは捨てる。
+            if state.isGestureLayerHeld {
+                state.release(IndicatorKey.gesture)
             }
-            let dx = Double(event.getIntegerValueField(.mouseEventDeltaX))
-            let dy = Double(event.getIntegerValueField(.mouseEventDeltaY))
-            gestures.feed(deltaX: dx, deltaY: dy)
-            // ジェスチャ中はポインタを動かさない
-            return nil
+            gestures.cancel()
+            break
 
         default:
             break
@@ -344,8 +596,9 @@ final class StatusController: NSObject {
     private let leftItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let rightItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let statusItemRow = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let monitorItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let gestureItem = NSMenuItem(title: "トラックボールジェスチャ", action: #selector(toggleGesture), keyEquivalent: "")
-    private let keymapItem = NSMenuItem(title: "キーマップオーバーレイ", action: #selector(toggleKeymapOverlay), keyEquivalent: "k")
+    private let keymapItem = NSMenuItem(title: "レイヤーでキーマップを表示", action: #selector(toggleKeymapOverlay), keyEquivalent: "k")
 
     override init() {
         super.init()
@@ -365,6 +618,7 @@ final class StatusController: NSObject {
         menu.addItem(leftItem)
         menu.addItem(rightItem)
         menu.addItem(statusItemRow)
+        menu.addItem(monitorItem)
         menu.addItem(.separator())
 
         gestureItem.target = self
@@ -385,7 +639,7 @@ final class StatusController: NSObject {
         let quit = NSMenuItem(title: "終了", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
 
-        [layerItem, modeItem, leftItem, rightItem, statusItemRow].forEach { $0.isEnabled = false }
+        [layerItem, modeItem, leftItem, rightItem, statusItemRow, monitorItem].forEach { $0.isEnabled = false }
     }
 
     var batteryMonitor: BatteryMonitor?
@@ -420,6 +674,7 @@ final class StatusController: NSObject {
         leftItem.title  = "左 (L): " + (state.leftBattery.map { "\($0)%" } ?? "—")
         rightItem.title = "右 (R): " + (state.rightBattery.map { "\($0)%" } ?? "—")
         statusItemRow.title = state.bluetoothStatus
+        monitorItem.title = state.monitorStatus
         gestureItem.state = prefs.gestureEnabled ? .on : .off
         keymapItem.state = prefs.keymapOverlayEnabled ? .on : .off
         AppWindows.shared.syncKeymap()
@@ -437,24 +692,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let status = StatusController()
         self.status = status
         KeyboardState.shared.onChange = { [weak status] in
-            status?.render()
+            if Thread.isMainThread {
+                status?.render()
+            } else {
+                DispatchQueue.main.async { status?.render() }
+            }
+        }
+        KeyboardState.shared.onPressedChange = {
+            AppWindows.shared.pushKeymapPressed()
         }
         NotificationCenter.default.addObserver(forName: Preferences.didChange, object: nil, queue: .main) { _ in
             status.render()
         }
 
-        let trusted = AXIsProcessTrustedWithOptions(
+        _ = AXIsProcessTrustedWithOptions(
             [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         )
 
         let tap = EventTapMonitor()
-        if tap.start() {
-            self.tap = tap
-        } else {
-            KeyboardState.shared.bluetoothStatus = trusted
-                ? "キー監視を開始できませんでした"
-                : "「アクセシビリティ」で許可後、再起動してください"
-        }
+        self.tap = tap
+        tap.start()
 
         let battery = BatteryMonitor()
         self.battery = battery

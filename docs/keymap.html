@@ -148,6 +148,14 @@
     .key.kind-layer .hold { color: var(--layer); }
     .key.kind-ime .tap { color: var(--ime); }
     .key.kind-num .tap { color: var(--num); }
+    .key.pressed {
+      border-color: #c8a36a;
+      box-shadow: 0 0 0 2px rgba(200,163,106,0.9), 0 2px 0 #0c0e12;
+    }
+    .key.pressed .face {
+      background: #3d3426;
+      border-color: #c8a36a;
+    }
     .hold { font-size: 9px; line-height: 1.05; color: var(--hold); min-height: 10px; }
     .tap { font-size: 12px; font-weight: 650; line-height: 1.1; }
     .note { max-width: 980px; margin: 18px auto 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
@@ -265,7 +273,7 @@ const BASE_MAC = [
   T("Y"), T("U"), T("I"), T("O"), T("P"),
   H("A", "⌘", "mod"), H("S", "⌥", "mod"), H("D", "⌃", "mod"), H("F", "⇧", "mod"), T("G"),
   NO,
-  T("?"), T("H"), H("J", "⇧", "mod"), H("K", "⌃", "mod"), H("L", "⌥", "mod"), H(";", "⌘", "mod"),
+  H("?", "Fn", "layer", { goto: "fn" }), T("H"), H("J", "⇧", "mod"), H("K", "⌃", "mod"), H("L", "⌥", "mod"), H(";", "⌘", "mod"),
   T("Z"), T("X"), T("C"), T("V"), T("B"),
   T("Esc"),
   T("⌫"), T("N"), T("M"), T(","), T("."), T("/"),
@@ -346,9 +354,9 @@ const MOUSE = [
 ];
 
 const NOTES = {
-  base: "親指の内側4つが 英数 / Space / Enter / かな。英数・かなは長押しで L⌥ / R⌥。その左隣（旧英数）が Gesture。",
+  base: "親指の内側4つが 英数 / Space / Enter / かな。英数・かなは長押しで L⌥ / R⌥。その左隣（旧英数）が Gesture。? はタップで ?、長押しで Fn。",
   num: "左手テンキー。. と / は Q と A。最下行の外側は透過のままです。* は Sym 層。⌫ 位置は Delete。",
-  fn: "F1–F9 は数字と同じ位置。F12/F11/F10 は +/−/= の列。BT0–2 は Q/A/Z。Caps Word は ⌫ の位置。最下行は使いません。",
+  fn: "F1–F9 は数字と同じ位置。F12/F11/F10 は +/−/= の列。BT0–2 は Q/A/Z。Caps Word は ⌫ の位置。? 長押し、右下、または Space+Enter で出ます。最下行は使いません。",
   sym: "Num に無い記号。* もここにあります。ここの ⌫ 位置も Delete です。",
   gesture: "Gesture 押しながらボールをフリック。上=Mission Control、下=App Exposé、左右=デスクトップ切替。変換はキーボード本体で行うので、BobTailBar なしでも動きます。",
   mouse: "ボール操作中のクリックはホーム段。中クリックはタップでクリック、長押しでスクロール。Gesture は旧英数の位置（この層でも同じキー）です。",
@@ -366,6 +374,7 @@ const LAYERS = [
 
 let current = "base";
 let os = "mac";
+let pressed = [];
 
 function applyAppearance(mode) {
   const resolved = (mode === "embed" || mode === "hud") ? mode : "page";
@@ -429,6 +438,8 @@ function render() {
     if (key.trans) div.classList.add("trans");
     if (key.none) div.classList.add("none");
     if (key.kind) div.classList.add("kind-" + key.kind);
+    if (pressed.includes(i)) div.classList.add("pressed");
+    div.dataset.i = String(i);
     place(div, box);
     div.innerHTML = `<div class="face"><div class="hold">${key.hold || ""}</div><div class="tap">${key.tap || ""}</div></div>`;
     if (key.goto) {
@@ -454,12 +465,22 @@ window.setBobTailAppearance = function(mode) {
   render();
 };
 
-window.setBobTailState = function(layer, osName) {
+window.setBobTailPressed = function(ids) {
+  pressed = Array.isArray(ids) ? ids.map(Number) : [];
+  document.querySelectorAll(".key").forEach((el) => {
+    el.classList.toggle("pressed", pressed.includes(Number(el.dataset.i)));
+  });
+};
+
+window.setBobTailState = function(layer, osName, pressedIds) {
   if (typeof layer === "string" && (LAYERS.some((item) => item.id === layer) || layer === "scroll")) {
     current = layer;
   }
   if (osName === "win" || osName === "Windows") os = "win";
   if (osName === "mac" || osName === "macOS") os = "mac";
+  if (pressedIds !== undefined) {
+    pressed = Array.isArray(pressedIds) ? pressedIds.map(Number) : [];
+  }
   render();
 };
 </script>

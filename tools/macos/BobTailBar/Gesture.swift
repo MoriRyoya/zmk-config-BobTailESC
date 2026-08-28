@@ -86,8 +86,7 @@ final class GestureEngine {
     }
 
     func finishIfNeeded() {
-        guard axis != nil else { return }
-        finish()
+        cancel()
     }
 
     /// ジェスチャキーを離したとき。途中まで動いていればトラックパッドと同じく commit / cancel する。
@@ -111,6 +110,16 @@ final class GestureEngine {
                 )
             }
         }
+        reset()
+    }
+
+    /// カーソル移動が来た時点でジェスチャは終わっている。残りを Mission Control にしない。
+    func cancel() {
+        guard let axis else {
+            reset()
+            return
+        }
+        DockSwipe.post(axis: axis, phase: DockSwipe.cancelled, origin: originOffset, lastDelta: lastDelta)
         reset()
     }
 

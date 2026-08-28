@@ -97,11 +97,11 @@ final class Preferences {
     }
 
     var keymapOverlayEnabled: Bool {
-        get { defaults.bool(forKey: "keymapOverlayEnabled") }
-        set { defaults.set(newValue, forKey: "keymapOverlayEnabled"); ping() }
+        get { defaults.object(forKey: "keymapOverlayEnabled2") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "keymapOverlayEnabled2"); ping() }
     }
 
-    /// 0.25 ... 1.0
+    /// 0.25 ... 1.0（ウィンドウの alpha）。UI の「透明度」は 1 - この値。
     var keymapOverlayOpacity: Double {
         get {
             if defaults.object(forKey: "keymapOverlayOpacity") == nil { return 0.78 }
@@ -110,14 +110,28 @@ final class Preferences {
         set { defaults.set(min(1, max(0.25, newValue)), forKey: "keymapOverlayOpacity"); ping() }
     }
 
+    /// キーマップ重ね表示の倍率。0.55 ... 1.7
+    var keymapOverlayScale: Double {
+        get {
+            if defaults.object(forKey: "keymapOverlayScale") == nil { return 1.0 }
+            return min(1.7, max(0.55, defaults.double(forKey: "keymapOverlayScale")))
+        }
+        set { defaults.set(min(1.7, max(0.55, newValue)), forKey: "keymapOverlayScale"); ping() }
+    }
+
     var keymapOverlayClickThrough: Bool {
         get { defaults.object(forKey: "keymapOverlayClickThrough") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "keymapOverlayClickThrough"); ping() }
     }
 
     var keymapOverlayHideOnBase: Bool {
-        get { defaults.bool(forKey: "keymapOverlayHideOnBase") }
-        set { defaults.set(newValue, forKey: "keymapOverlayHideOnBase"); ping() }
+        get { defaults.object(forKey: "keymapOverlayHideOnBase2") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "keymapOverlayHideOnBase2"); ping() }
+    }
+
+    var keymapHighlightPressed: Bool {
+        get { defaults.object(forKey: "keymapHighlightPressed") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "keymapHighlightPressed"); ping() }
     }
 
     /// bottomRight / bottomLeft / topRight / topLeft
