@@ -218,6 +218,6 @@ python3 tools/check_keymap.py
 | --- | --- |
 | ホームロー修飾キーの効きを変える | `hml` / `hmr` の `tapping-term-ms`、`require-prior-idle-ms` |
 | ホームロー修飾キーをやめる | Base 層の `&hml LGUI A` などを `&kp A` に置き換える |
-| レイヤー通知（F13 / F16–F21）を止める | 先頭の `#define LAYER_INDICATOR 1` を `0` にする |
+| レイヤー通知（F13 / F16–F20 と Help）を止める | 先頭の `#define LAYER_INDICATOR 1` を `0` にする |
 | エンコーダの割り当て | 各レイヤーの `sensor-bindings` |
 | トラックボールの感度 | `config/boards/shields/Test/BobTail_R.conf` の `CONFIG_PMW3610_CPI` |

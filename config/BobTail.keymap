@@ -45,8 +45,8 @@
 #define LAYER_INDICATOR 1
 
 #define IND_NUM  F13
-#define IND_SYM  F21   /* F14/F15 は macOS の輝度キーなので使わない */
-#define IND_SCRL F16
+#define IND_SYM  F16   /* F14/F15 は輝度。F21 は macOS がキーイベントにしない */
+#define IND_SCRL K_HELP
 #define IND_GEST F17
 #define IND_FN   F18
 #define IND_MAC  F19
