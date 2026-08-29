@@ -813,8 +813,9 @@ static int pmw3610_report_data(const struct device *dev) {
             input_report_rel(dev, INPUT_REL_X, x, false, K_FOREVER);
             input_report_rel(dev, INPUT_REL_Y, y, true, K_FOREVER);
         } else if (input_mode == SCROLL) {
-            /* Lock to the first clear axis so leftover diagonal motion does
-             * not spray horizontal wheel ticks (Finder beeps on those). */
+            /* Prefer vertical scroll. Horizontal only when motion is clearly
+             * sideways; otherwise leftover X becomes HWHEEL and apps like
+             * Finder / Spark play the system alert. */
             if (data->scroll_axis_lock == 1) {
                 data->scroll_delta_y += y;
             } else if (data->scroll_axis_lock == 2) {
@@ -824,10 +825,15 @@ static int pmw3610_report_data(const struct device *dev) {
                 data->scroll_delta_y += y;
                 const int32_t ax = abs(data->scroll_delta_x);
                 const int32_t ay = abs(data->scroll_delta_y);
-                if (ay > CONFIG_PMW3610_SCROLL_TICK && ay >= ax) {
+                const int32_t tick = CONFIG_PMW3610_SCROLL_TICK;
+                /* Vertical wins on any near-tie. Horizontal needs ~4x dominance
+                   and a larger absolute move so diagonal noise never locks X. */
+                if (ay > tick && ay * 2 >= ax) {
                     data->scroll_axis_lock = 1;
-                } else if (ax > CONFIG_PMW3610_SCROLL_TICK && ax > (ay * 3) / 2) {
+                    data->scroll_delta_x = 0;
+                } else if (ax > tick * 2 && ax > ay * 4) {
                     data->scroll_axis_lock = 2;
+                    data->scroll_delta_y = 0;
                 }
             }
 
