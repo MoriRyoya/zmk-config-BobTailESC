@@ -31,6 +31,7 @@
 #include <dt-bindings/zmk/pointing.h>
 
 /* MOUSE / SCRL を低くして、Num 層を押したままボールに触れても壊れない */
+
 #define BASE   0
 #define MOUSE  1
 #define SCRL   2
@@ -41,9 +42,7 @@
 #define NUMW   7   /* WIN + NUM */
 #define GESTW  8   /* WIN + GEST */
 #define FN     9
-
 #define LAYER_INDICATOR 1
-
 #define IND_NUM  F13
 #define IND_SYM  F16   /* F14/F15 は輝度。F21 は macOS がキーイベントにしない */
 #define IND_SCRL K_HELP
@@ -53,6 +52,7 @@
 #define IND_WIN  F20
 
 #if LAYER_INDICATOR
+
 #define HOLD_NUM   &ind_num
 #define HOLD_SYM   &ind_sym
 #define HOLD_SCRL  &ind_scrl
@@ -62,7 +62,9 @@
 #define TOG_NUM    &num_lock
 #define OS_MAC     &os_mac
 #define OS_WIN     &os_win
+
 #else
+
 #define HOLD_NUM   &mo
 #define HOLD_SYM   &mo
 #define HOLD_SCRL  &mo
@@ -72,6 +74,7 @@
 #define TOG_NUM    &tog NUM
 #define OS_MAC     &to BASE
 #define OS_WIN     &to WIN
+
 #endif
 
 #define KEYS_L  0  1  2  3  4 10 11 12 13 14 22 23 24 25 26 27 34 35 36
@@ -123,6 +126,7 @@
         };
 
         /* 中クリック: タップで MB3、長押しでボールをスクロール (SCRL 層) */
+
         lt_scrl: layer_tap_scroll {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -142,6 +146,7 @@
         };
 
         /* ?: タップで ?、長押しで Fn */
+
         lt_fn: layer_tap_fn {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -152,6 +157,7 @@
         };
 
         /* 英数 / かな: タップで IME、長押しで LALT / RALT */
+
         ime_mod: ime_mod_tap {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -165,6 +171,7 @@
             compatible = "zmk,behavior-sensor-rotate";
             #sensor-binding-cells = <0>;
             bindings = <&msc SCRL_UP>, <&msc SCRL_DOWN>;
+
             tap-ms = <20>;
         };
     };
@@ -175,9 +182,12 @@
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <0>;
-            bindings = <&macro_press &mo NUM &kp IND_NUM>
-                     , <&macro_pause_for_release>
-                     , <&macro_release &kp IND_NUM &mo NUM>;
+            bindings =
+                <&macro_press>,
+                <&mo NUM &kp IND_NUM>,
+                <&macro_pause_for_release>,
+                <&macro_release>,
+                <&kp IND_NUM &mo NUM>;
         };
 
         ind_sym: ind_sym {
@@ -185,9 +195,12 @@
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <0>;
-            bindings = <&macro_press &mo SYM &kp IND_SYM>
-                     , <&macro_pause_for_release>
-                     , <&macro_release &kp IND_SYM &mo SYM>;
+            bindings =
+                <&macro_press>,
+                <&mo SYM &kp IND_SYM>,
+                <&macro_pause_for_release>,
+                <&macro_release>,
+                <&kp IND_SYM &mo SYM>;
         };
 
         ind_scrl: ind_scrl {
@@ -195,9 +208,12 @@
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <0>;
-            bindings = <&macro_press &mo SCRL &kp IND_SCRL>
-                     , <&macro_pause_for_release>
-                     , <&macro_release &kp IND_SCRL &mo SCRL>;
+            bindings =
+                <&macro_press>,
+                <&mo SCRL &kp IND_SCRL>,
+                <&macro_pause_for_release>,
+                <&macro_release>,
+                <&kp IND_SCRL &mo SCRL>;
         };
 
         ind_gest: ind_gest {
@@ -205,9 +221,12 @@
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <0>;
-            bindings = <&macro_press &mo GEST &kp IND_GEST>
-                     , <&macro_pause_for_release>
-                     , <&macro_release &kp IND_GEST &mo GEST>;
+            bindings =
+                <&macro_press>,
+                <&mo GEST &kp IND_GEST>,
+                <&macro_pause_for_release>,
+                <&macro_release>,
+                <&kp IND_GEST &mo GEST>;
         };
 
         ind_fn: ind_fn {
@@ -215,21 +234,28 @@
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <0>;
-            bindings = <&macro_press &mo FN &kp IND_FN>
-                     , <&macro_pause_for_release>
-                     , <&macro_release &kp IND_FN &mo FN>;
+            bindings =
+                <&macro_press>,
+                <&mo FN &kp IND_FN>,
+                <&macro_pause_for_release>,
+                <&macro_release>,
+                <&kp IND_FN &mo FN>;
         };
 
         /* macOS は C_BRI_* を画面輝度として扱わない。F14/F15 がシステムの輝度キー。
            Windows 向けにコンシューマーキーも同時に送る */
+
         bri_dn: bri_dn {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <0>;
-            bindings = <&macro_press &kp C_BRI_DN &kp F14>
-                     , <&macro_pause_for_release>
-                     , <&macro_release &kp F14 &kp C_BRI_DN>;
+            bindings =
+                <&macro_press>,
+                <&kp C_BRI_DN &kp F14>,
+                <&macro_pause_for_release>,
+                <&macro_release>,
+                <&kp F14 &kp C_BRI_DN>;
         };
 
         bri_up: bri_up {
@@ -237,9 +263,12 @@
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <0>;
-            bindings = <&macro_press &kp C_BRI_UP &kp F15>
-                     , <&macro_pause_for_release>
-                     , <&macro_release &kp F15 &kp C_BRI_UP>;
+            bindings =
+                <&macro_press>,
+                <&kp C_BRI_UP &kp F15>,
+                <&macro_pause_for_release>,
+                <&macro_release>,
+                <&kp F15 &kp C_BRI_UP>;
         };
 
         num_lock: num_lock {
@@ -247,7 +276,7 @@
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <0>;
-            bindings = <&macro_tap &tog NUM &kt IND_NUM>;
+            bindings = <&macro_tap>, <&tog NUM &kt IND_NUM>;
         };
 
         os_mac: os_mac {
@@ -255,7 +284,7 @@
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <20>;
-            bindings = <&to BASE>, <&macro_tap &kp IND_MAC>;
+            bindings = <&to BASE>, <&macro_tap>, <&kp IND_MAC>;
         };
 
         os_win: os_win {
@@ -263,7 +292,7 @@
             #binding-cells = <0>;
             wait-ms = <0>;
             tap-ms = <20>;
-            bindings = <&to WIN>, <&macro_tap &kp IND_WIN>;
+            bindings = <&to WIN>, <&macro_tap>, <&kp IND_WIN>;
         };
     };
 
@@ -300,49 +329,55 @@
          *  Z     X     C     V     B  Esc| ⌫    N     M     ,     .     /
          * Tab   ⌃    ⌘   GES  英数/⌥  Spc| Ent  かな/⌥                    Fn
          * ============================================================ */
+
         base_layer {
             display-name = "Base";
             bindings = <
-&kp Q         &kp W         &kp E          &kp R          &kp T                                          &kp Y      &kp U         &kp I         &kp O         &kp P
-&hml LGUI A   &hml LALT S   &hml LCTRL D   &hml LSHFT F   &kp G       &none                 &lt_fn FN QMARK &kp H      &hmr RSHFT J  &hmr RCTRL K  &hmr RALT L   &hmr RGUI SEMI
-&kp Z         &kp X         &kp C          &kp V          &kp B       &kp ESC               &kp BSPC      &kp N      &kp M         &kp COMMA     &kp DOT       &kp SLASH
-&kp TAB       &kp LCTRL     &kp LGUI       HOLD_GEST      &ime_mod LALT LANG2   &lt_num NUM SPACE     &lt_sym SYM ENTER &ime_mod RALT LANG1                              MO_FN
+&kp Q        &kp W        &kp E               &kp R                &kp T                                                                &kp Y  &kp U         &kp I         &kp O        &kp P
+&hml LGUI A  &hml LALT S  &hml LCTRL D        &hml LSHFT F         &kp G              &none                  &lt_fn FN QMARK            &kp H  &hmr RSHFT J  &hmr RCTRL K  &hmr RALT L  &hmr RGUI SEMI
+&kp Z        &kp X        &kp C               &kp V                &kp B              &kp ESC                &kp BSPC                   &kp N  &kp M         &kp COMMA     &kp DOT      &kp SLASH
+&kp TAB      &kp LCTRL    &kp LGUI HOLD_GEST  &ime_mod LALT LANG2  &lt_num NUM SPACE  &lt_sym SYM ENTER      &ime_mod RALT LANG1 MO_FN
             >;
+
             sensor-bindings = <&enc_scroll>;
         };
 
         mouse_layer {
             display-name = "Mouse";
             bindings = <
-&trans  &trans  &trans  &trans  &trans                    &trans      &trans      &trans      &trans      &trans
-&trans  &trans  &trans  &trans  &trans  &none     &trans  &mkp MB4    &mkp MB1    &lt_scrl SCRL MB3    &mkp MB2    &mkp MB5
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans      &trans      &trans      &trans      &trans
-&trans  &trans  &trans  HOLD_GEST  &trans  &trans    &trans  &trans                                          &trans
+&trans  &trans  &trans            &trans  &trans                      &trans    &trans    &trans             &trans    &trans
+&trans  &trans  &trans            &trans  &trans  &none       &trans  &mkp MB4  &mkp MB1  &lt_scrl SCRL MB3  &mkp MB2  &mkp MB5
+&trans  &trans  &trans            &trans  &trans  &trans      &trans  &trans    &trans    &trans             &trans    &trans
+&trans  &trans  &trans HOLD_GEST  &trans  &trans  &trans      &trans  &trans
             >;
+
             sensor-bindings = <&enc_scroll>;
         };
 
         /* ボールをスクロールにする内部層。専用キーは無い。中クリック長押しで乗る。
            キーはすべて透過して、下の Mouse 層のクリックを残す */
+
         scroll_layer {
             display-name = "Scroll";
             bindings = <
-&trans  &trans  &trans  &trans  &trans                    &trans      &trans      &trans      &trans      &trans
-&trans  &trans  &trans  &trans  &trans  &none     &trans  &trans      &trans      &trans      &trans      &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans      &trans      &trans      &trans      &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans                                          &trans
+&trans  &trans  &trans  &trans  &trans                      &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans  &none       &trans  &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans                          &trans
             >;
+
             sensor-bindings = <&enc_scroll>;
         };
 
         win_layer {
             display-name = "Win";
             bindings = <
-&trans        &trans  &trans        &trans  &trans                    &trans  &trans  &trans        &trans  &trans
-&hml LCTRL A  &trans  &hml LGUI D   &trans  &trans  &none     &trans  &trans  &trans  &hmr RGUI K   &trans  &hmr RCTRL SEMI
-&trans        &trans  &trans        &trans  &trans  &trans    &trans  &trans  &trans  &trans        &trans  &trans
-&trans        &kp LGUI &kp LCTRL    &trans  &trans  &trans    &trans  &trans                                &trans
+&trans        &trans    &trans       &trans  &trans                      &trans  &trans  &trans       &trans  &trans
+&hml LCTRL A  &trans    &hml LGUI D  &trans  &trans  &none       &trans  &trans  &trans  &hmr RGUI K  &trans  &hmr RCTRL SEMI
+&trans        &trans    &trans       &trans  &trans  &trans      &trans  &trans  &trans  &trans       &trans  &trans
+&trans        &kp LGUI  &kp LCTRL    &trans  &trans  &trans      &trans  &trans                               &trans
             >;
+
             sensor-bindings = <&enc_scroll>;
         };
 
@@ -355,62 +390,70 @@
          *
          * 最下行の外側 (Tab/⌃/⌘) は使わない。* は Sym 層
          * ============================================================ */
+
         num_layer {
             display-name = "Num+Nav";
             bindings = <
-&kp DOT     &kp N7    &kp N8    &kp N9    &kp PLUS                                &kp LG(LEFT)  &kp LPAR   &kp UP    &kp RPAR      &kp LG(RIGHT)
-&kp SLASH   &kp N4    &kp N5    &kp N6    &kp MINUS  &none          &trans        &kp LBRC      &kp LEFT   &kp DOWN  &kp RIGHT     &kp RBRC
-&kp N0      &kp N1    &kp N2    &kp N3    &kp EQUAL  &trans         &kp DEL       &kp LBKT      &kp RBKT   &kp LA(LEFT) &kp LA(RIGHT) &kp BSLH
-&trans      &trans    &trans    &trans    &trans     &trans         &trans        &trans                                                &trans
+&kp DOT    &kp N7  &kp N8  &kp N9  &kp PLUS                              &kp LG(LEFT)  &kp LPAR  &kp UP        &kp RPAR       &kp LG(RIGHT)
+&kp SLASH  &kp N4  &kp N5  &kp N6  &kp MINUS  &none             &trans   &kp LBRC      &kp LEFT  &kp DOWN      &kp RIGHT      &kp RBRC
+&kp N0     &kp N1  &kp N2  &kp N3  &kp EQUAL  &kp ASTERISK      &kp DEL  &kp LBKT      &kp RBKT  &kp LA(LEFT)  &kp LA(RIGHT)  &kp BSLH
+&trans     &trans  &trans  &trans  &trans     &trans            &trans   &trans                                               &trans
             >;
+
             sensor-bindings = <&inc_dec_kp LC(LS(TAB)) LC(TAB)>;
         };
 
         /* ============================================================
          * 5: SYM — Enter 長押し。Num 層に無い記号
          * ============================================================ */
+
         sym_layer {
             display-name = "Sym";
             bindings = <
-&kp EXCL   &kp AT     &kp HASH  &kp DLLR  &kp PRCNT                              &kp CARET  &kp AMPS   &kp ASTRK  &kp TILDE  &kp QMARK
-&kp SQT    &kp DQT    &kp GRAVE &kp PIPE  &kp UNDER  &none          &trans        &kp COLON  &kp SEMI   &kp LT     &kp GT     &kp PLUS
-&none      &none      &none     &none     &none      &trans         &kp DEL       &none      &none      &none      &none      &none
-&trans     &trans     &trans    &trans    &trans     &trans         &trans        &trans                                          &trans
+&kp EXCL  &kp AT   &kp HASH   &kp DLLR  &kp PRCNT                       &kp CARET  &kp AMPS  &kp ASTRK  &kp TILDE  &kp QMARK
+&kp SQT   &kp DQT  &kp GRAVE  &kp PIPE  &kp UNDER  &none       &trans   &kp COLON  &kp SEMI  &kp LT     &kp GT     &kp PLUS
+&none     &none    &none      &none     &none      &trans      &kp DEL  &none      &none     &none      &none      &none
+&trans    &trans   &trans     &trans    &trans     &trans      &trans   &trans                                     &trans
             >;
+
             sensor-bindings = <&enc_scroll>;
         };
 
         gest_layer {
             display-name = "Gesture";
             bindings = <
-&trans  &trans  &trans  &trans  &trans                            &kp LG(LS(N4))  &kp LG(LBKT)  &kp LC(UP)    &kp LG(RBKT)  &kp LG(LS(N5))
-&trans  &trans  &trans  &trans  &trans  &none        &trans        &kp LG(GRAVE)   &kp LC(LEFT)  &kp LC(DOWN)  &kp LC(RIGHT) &kp LG(TAB)
-&trans  &trans  &trans  &trans  &trans  &trans       &trans        &kp LG(H)       &kp LG(M)     &kp LC(LG(F)) &trans        &trans
-&trans  &trans  &trans  &trans  &trans  &trans       &trans        &trans                                                     &trans
+&kp ESC  &trans  &trans  &trans  &trans                      &kp LG(LS(N4))  &kp LG(LBKT)  &kp LC(UP)     &kp LG(RBKT)   &kp LG(LS(N5))
+&trans   &trans  &trans  &trans  &trans  &none       &trans  &kp LG(GRAVE)   &kp LC(LEFT)  &kp LC(DOWN)   &kp LC(RIGHT)  &kp LG(TAB)
+&trans   &trans  &trans  &trans  &trans  &trans      &trans  &kp LG(H)       &kp LG(M)     &kp LC(LG(F))  &trans         &trans
+&trans   &trans  &trans  &trans  &trans  &trans      &trans  &trans                                                      &trans
             >;
+
             sensor-bindings = <&enc_scroll>;
         };
 
         /* Windows 時: 行頭行末・単語移動だけ差し替え。括弧と数字はそのまま */
+
         numw_layer {
             display-name = "Num(Win)";
             bindings = <
-&trans  &trans  &trans  &trans  &trans                            &kp HOME  &trans  &trans  &trans  &kp END
-&trans  &trans  &trans  &trans  &trans  &none        &trans        &trans    &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans       &trans        &trans    &trans  &kp LC(LEFT) &kp LC(RIGHT) &trans
-&trans  &trans  &trans  &trans  &trans  &trans       &trans        &trans                                        &trans
+&trans  &trans  &trans  &trans  &trans                      &kp HOME  &trans  &trans        &trans         &kp END
+&trans  &trans  &trans  &trans  &trans  &none       &trans  &trans    &trans  &trans        &trans         &trans
+&trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans    &trans  &kp LC(LEFT)  &kp LC(RIGHT)  &trans
+&trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans                                         &trans
             >;
+
             sensor-bindings = <&inc_dec_kp LC(LS(TAB)) LC(TAB)>;
         };
 
         gestw_layer {
             display-name = "Gest(Win)";
             bindings = <
-&trans  &trans  &trans  &trans  &trans                            &kp LG(LS(S))  &kp LA(LEFT)      &kp LG(TAB)  &kp LA(RIGHT)       &kp PSCRN
-&trans  &trans  &trans  &trans  &trans  &none        &trans        &none          &kp LC(LG(LEFT))  &kp LG(D)    &kp LC(LG(RIGHT))   &kp LA(TAB)
-&trans  &trans  &trans  &trans  &trans  &trans       &trans        &kp LG(DOWN)   &kp LG(UP)        &kp F11      &trans              &trans
-&trans  &trans  &trans  &trans  &trans  &trans       &trans        &trans                                                        &trans
+&trans  &trans  &trans  &trans  &trans                      &kp LG(LS(S))  &kp LA(LEFT)      &kp LG(TAB)  &kp LA(RIGHT)      &kp PSCRN
+&trans  &trans  &trans  &trans  &trans  &none       &trans  &none          &kp LC(LG(LEFT))  &kp LG(D)    &kp LC(LG(RIGHT))  &kp LA(TAB)
+&trans  &trans  &trans  &trans  &trans  &trans      &trans  &kp LG(DOWN)   &kp LG(UP)        &kp F11      &trans             &trans
+&trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans                                                           &trans
             >;
+
             sensor-bindings = <&enc_scroll>;
         };
 
@@ -422,14 +465,16 @@
          *  BT1  F4  F5  F6  F11 | ミュート 音量- 音量+ PrtSc NumLk
          *  BT2  F1  F2  F3  F10 | Caps  Mac   Win   出力  BT削除 ブート
          * ============================================================ */
+
         fn_layer {
             display-name = "Fn";
             bindings = <
-&bt BT_SEL 0  &kp F7        &kp F8        &kp F9        &kp F12                                   &bri_dn        &bri_up        &kp C_PREV    &kp C_PP     &kp C_NEXT
-&bt BT_SEL 1  &kp F4        &kp F5        &kp F6        &kp F11       &none         &trans        &kp C_MUTE    &kp C_VOL_DN  &kp C_VOL_UP  &kp PSCRN    TOG_NUM
-&bt BT_SEL 2  &kp F1        &kp F2        &kp F3        &kp F10       &trans        &caps_word    OS_MAC        OS_WIN        &out OUT_TOG  &bt BT_CLR   &bootloader
-&trans        &trans        &trans        &trans        &trans        &trans         &trans        &trans                                                 &trans
+&bt BT_SEL 0  &kp F7  &kp F8  &kp F9  &kp F12                                              &bri_dn     &bri_up       &kp C_PREV    &kp C_PP           &kp C_NEXT
+&bt BT_SEL 1  &kp F4  &kp F5  &kp F6  &kp F11  &none                         &trans        &kp C_MUTE  &kp C_VOL_DN  &kp C_VOL_UP  &kp PSCRN TOG_NUM  &bt BT_SEL 2
+&trans        &kp F1  &kp F2  &kp F3  &kp F10  &caps_word OS_MAC OS_WIN      &out OUT_TOG  &bt BT_CLR  &bootloader   &trans        &trans             &trans
+&trans        &trans  &trans  &trans  &trans   &trans
             >;
+
             sensor-bindings = <&inc_dec_kp C_VOL_DN C_VOL_UP>;
         };
     };
