@@ -1,0 +1,32 @@
+Executable=/Applications/BobTailBar.app/Contents/MacOS/BobTailBar
+Identifier=local.bobtail.menubar
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20400 size=1358 flags=0x2(adhoc) hashes=36+3 location=embedded
+VersionPlatform=1
+VersionMin=1703936
+VersionSDK=1705216
+Hash type=sha256 size=32
+CandidateCDHash sha256=96987f979f6625b352bb9f8dc923f8e3cc0a64cc
+CandidateCDHashFull sha256=96987f979f6625b352bb9f8dc923f8e3cc0a64cc03fcf8fccfed5d2d47fdcd3a
+Hash choices=sha256
+CMSDigest=96987f979f6625b352bb9f8dc923f8e3cc0a64cc03fcf8fccfed5d2d47fdcd3a
+CMSDigestType=2
+Executable Segment base=0
+Executable Segment limit=278528
+Executable Segment flags=0x1
+Page size=16384
+CDHash=96987f979f6625b352bb9f8dc923f8e3cc0a64cc
+Signature=adhoc
+Info.plist entries=11
+TeamIdentifier=not set
+Sealed Resources version=2 rules=13 files=3
+Internal requirements count=0 size=12
+SEPARATOR
+Aug 29 21:06:48 2026 /Applications/BobTailBar.app/Contents/MacOS/BobTailBar
+2026-08-29 22:39:09.289 defaults[8312:1650275] 
+The domain/default pair of (local.bobtail.menubar, accessibilityPromptedSignature) does not exist
+ tools/macos/BobTailBar/Preferences.swift |  66 ++-
+ tools/macos/BobTailBar/Windows.swift     | 688 ++++++++++++++++++++++++++++---
+ tools/macos/BobTailBar/build.sh          |  41 +-
+ tools/macos/BobTailBar/main.swift        |  92 ++++-
+ 4 files changed, 806 insertions(+), 81 deletions(-)
