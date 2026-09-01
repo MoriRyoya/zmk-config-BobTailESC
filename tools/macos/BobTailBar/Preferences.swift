@@ -110,13 +110,40 @@ final class Preferences {
         set { defaults.set(min(1, max(0.25, newValue)), forKey: "keymapOverlayOpacity"); ping() }
     }
 
-    /// キーマップ重ね表示の倍率。0.55 ... 1.7
+    /// キーマップ重ね表示の倍率。0.55 ... 1.7（端ドラッグでも更新される）
     var keymapOverlayScale: Double {
         get {
             if defaults.object(forKey: "keymapOverlayScale") == nil { return 1.0 }
             return min(1.7, max(0.55, defaults.double(forKey: "keymapOverlayScale")))
         }
         set { defaults.set(min(1.7, max(0.55, newValue)), forKey: "keymapOverlayScale"); ping() }
+    }
+
+    /// オーバーレイ実サイズ。未設定なら scale から算出。
+    var keymapOverlayPixelSize: NSSize {
+        get {
+            let width = defaults.double(forKey: "keymapOverlayWidth")
+            let height = defaults.double(forKey: "keymapOverlayHeight")
+            if width >= 420, height >= 250 {
+                return NSSize(width: width, height: height)
+            }
+            let scale = CGFloat(keymapOverlayScale)
+            return NSSize(
+                width: (820 * scale).rounded(),
+                height: (488 * scale).rounded()
+            )
+        }
+        set {
+            let width = min(1400, max(420, newValue.width.rounded()))
+            let height = min(900, max(250, newValue.height.rounded()))
+            let same =
+                defaults.object(forKey: "keymapOverlayWidth") as? Double == Double(width) &&
+                defaults.object(forKey: "keymapOverlayHeight") as? Double == Double(height)
+            defaults.set(Double(width), forKey: "keymapOverlayWidth")
+            defaults.set(Double(height), forKey: "keymapOverlayHeight")
+            defaults.set(min(1.7, max(0.55, Double(width / 820))), forKey: "keymapOverlayScale")
+            if !same { ping() }
+        }
     }
 
     var keymapOverlayClickThrough: Bool {
@@ -132,6 +159,43 @@ final class Preferences {
     var keymapHighlightPressed: Bool {
         get { defaults.object(forKey: "keymapHighlightPressed") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "keymapHighlightPressed"); ping() }
+    }
+
+    /// auto / folder / github / bundled
+    var keymapSourceKind: String {
+        get { defaults.string(forKey: "keymapSourceKind") ?? "auto" }
+        set { defaults.set(newValue, forKey: "keymapSourceKind"); ping() }
+    }
+
+    var keymapFolderPath: String? {
+        get { defaults.string(forKey: "keymapFolderPath") }
+        set { defaults.set(newValue, forKey: "keymapFolderPath"); ping() }
+    }
+
+    var keymapGitHubRepo: String {
+        get { defaults.string(forKey: "keymapGitHubRepo") ?? "MoriRyoya/zmk-config-BobTailESC" }
+        set { defaults.set(newValue, forKey: "keymapGitHubRepo"); ping() }
+    }
+
+    var keymapGitHubBranch: String {
+        get {
+            let value = defaults.string(forKey: "keymapGitHubBranch") ?? ""
+            return value.isEmpty ? "feature/researcher-keymap" : value
+        }
+        set { defaults.set(newValue, forKey: "keymapGitHubBranch"); ping() }
+    }
+
+    var keymapGitHubPath: String {
+        get {
+            let value = defaults.string(forKey: "keymapGitHubPath") ?? ""
+            return value.isEmpty ? "config/BobTail.keymap" : value
+        }
+        set { defaults.set(newValue, forKey: "keymapGitHubPath"); ping() }
+    }
+
+    var keymapGitHubToken: String {
+        get { defaults.string(forKey: "keymapGitHubToken") ?? "" }
+        set { defaults.set(newValue, forKey: "keymapGitHubToken"); ping() }
     }
 
     /// bottomRight / bottomLeft / topRight / topLeft

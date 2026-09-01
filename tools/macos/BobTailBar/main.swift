@@ -143,6 +143,8 @@ enum KeyHighlight {
 
 final class KeyboardState {
     static let shared = KeyboardState()
+    static let didChange = Notification.Name("BobTailKeyboardStateDidChange")
+    static let pressedDidChange = Notification.Name("BobTailKeyboardPressedDidChange")
 
     private(set) var held = Set<Int64>()
     private(set) var pressedCodes = Set<Int64>()
@@ -177,6 +179,20 @@ final class KeyboardState {
 
     var onChange: (() -> Void)?
     var onPressedChange: (() -> Void)?
+
+    func notifyUI() {
+        applyOnMain { self.notifyChange() }
+    }
+
+    private func notifyChange() {
+        onChange?()
+        NotificationCenter.default.post(name: Self.didChange, object: self)
+    }
+
+    private func notifyPressedChange() {
+        onPressedChange?()
+        NotificationCenter.default.post(name: Self.pressedDidChange, object: self)
+    }
 
     /// 現在有効なレイヤー名。複数保持しているときはキーマップ側の優先順に合わせる。
     var layerName: String {
@@ -213,14 +229,14 @@ final class KeyboardState {
             case IndicatorKey.winMode: self.osMode = "Windows"
             default: self.held.insert(key)
             }
-            self.onChange?()
+            self.notifyChange()
         }
     }
 
     func release(_ key: Int64) {
         applyOnMain {
             self.held.remove(key)
-            self.onChange?()
+            self.notifyChange()
         }
     }
 
@@ -232,7 +248,7 @@ final class KeyboardState {
             } else {
                 changed = self.pressedCodes.remove(code) != nil
             }
-            if changed { self.onPressedChange?() }
+            if changed { self.notifyPressedChange() }
         }
     }
 
@@ -242,8 +258,8 @@ final class KeyboardState {
             guard !self.held.isEmpty || !self.pressedCodes.isEmpty else { return }
             self.held.removeAll()
             self.pressedCodes.removeAll()
-            self.onChange?()
-            self.onPressedChange?()
+            self.notifyChange()
+            self.notifyPressedChange()
         }
     }
 
@@ -251,7 +267,7 @@ final class KeyboardState {
         applyOnMain {
             guard self.monitorStatus != text else { return }
             self.monitorStatus = text
-            self.onChange?()
+            self.notifyChange()
         }
     }
 
@@ -496,7 +512,7 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
             KeyboardState.shared.bluetoothStatus = "\(match.name ?? "キーボード") に接続中…"
         } else {
             KeyboardState.shared.bluetoothStatus = "キーボードが見つかりません"
-            KeyboardState.shared.onChange?()
+            KeyboardState.shared.notifyUI()
         }
     }
 
@@ -506,10 +522,10 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
             discover()
         case .unauthorized:
             KeyboardState.shared.bluetoothStatus = "Bluetooth の使用が許可されていません"
-            KeyboardState.shared.onChange?()
+            KeyboardState.shared.notifyUI()
         default:
             KeyboardState.shared.bluetoothStatus = "Bluetooth が利用できません"
-            KeyboardState.shared.onChange?()
+            KeyboardState.shared.notifyUI()
         }
     }
 
@@ -521,7 +537,7 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
 
     func centralManager(_ manager: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         KeyboardState.shared.bluetoothStatus = "切断されました"
-        KeyboardState.shared.onChange?()
+        KeyboardState.shared.notifyUI()
         central.connect(peripheral, options: nil)
     }
 
@@ -541,7 +557,7 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
             }
         }
         KeyboardState.shared.bluetoothStatus = "接続済み"
-        KeyboardState.shared.onChange?()
+        KeyboardState.shared.notifyUI()
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverDescriptorsFor characteristic: CBCharacteristic, error: Error?) {
@@ -581,7 +597,7 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
             KeyboardState.shared.rightBattery = Int(level)
         }
         KeyboardState.shared.bluetoothStatus = "接続済み"
-        KeyboardState.shared.onChange?()
+        KeyboardState.shared.notifyUI()
     }
 }
 
@@ -681,6 +697,45 @@ final class StatusController: NSObject {
     }
 }
 
+// MARK: - 編集メニュー（LSUIElement でもテキスト欄のコピー / 貼り付けを有効化）
+
+enum AppMenu {
+    static func install() {
+        let main = NSMenu()
+
+        let appItem = NSMenuItem()
+        main.addItem(appItem)
+        let appMenu = NSMenu()
+        appItem.submenu = appMenu
+        appMenu.addItem(withTitle: "BobTailBar を終了", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        let editItem = NSMenuItem(title: "編集", action: nil, keyEquivalent: "")
+        main.addItem(editItem)
+        let editMenu = NSMenu(title: "編集")
+        editItem.submenu = editMenu
+        editMenu.addItem(withTitle: "元に戻す", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "やり直し", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "切り取り", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "コピー", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "貼り付け", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "すべて選択", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+
+        NSApp.mainMenu = main
+    }
+
+    static func textEditMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "切り取り", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        menu.addItem(withTitle: "コピー", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        menu.addItem(withTitle: "貼り付け", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "すべて選択", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        return menu
+    }
+}
+
 // MARK: - エントリポイント
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -689,6 +744,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var battery: BatteryMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppMenu.install()
+
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
+            ?? Bundle.main.url(forResource: "AppIcon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            NSApp.applicationIconImage = image
+        }
+
         let status = StatusController()
         self.status = status
         KeyboardState.shared.onChange = { [weak status] in
@@ -704,6 +767,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(forName: Preferences.didChange, object: nil, queue: .main) { _ in
             status.render()
         }
+        KeymapSource.shared.start()
+        AppWindows.shared.prepareKeymapOverlay()
+        // LSUIElement のままだと WKWebView が眠ることがあるので、設定を開くのと同じく一度前面へ出す
+        NSApp.activate(ignoringOtherApps: true)
 
         _ = AXIsProcessTrustedWithOptions(
             [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary

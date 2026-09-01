@@ -19,6 +19,16 @@ RESOURCES="${APP_DIR}/Contents/Resources"
 mkdir -p "${RESOURCES}"
 cp "../../../docs/keymap.html" "${RESOURCES}/keymap.html"
 
+# アプリアイコン
+if [[ -f AppIcon.icns ]]; then
+    cp AppIcon.icns "${RESOURCES}/AppIcon.icns"
+elif [[ -d AppIcon.iconset ]]; then
+    iconutil -c icns AppIcon.iconset -o "${RESOURCES}/AppIcon.icns"
+fi
+if [[ -f AppIcon.png ]]; then
+    cp AppIcon.png "${RESOURCES}/AppIcon.png"
+fi
+
 swiftc -O \
     -framework AppKit \
     -framework CoreBluetooth \
@@ -26,8 +36,9 @@ swiftc -O \
     -framework WebKit \
     -framework ServiceManagement \
     -framework IOKit \
+    -framework CoreServices \
     -o "${MACOS_DIR}/${APP_NAME}" \
-    main.swift Preferences.swift Windows.swift Gesture.swift
+    main.swift Preferences.swift Windows.swift Gesture.swift KeymapSource.swift
 
 cat > "${APP_DIR}/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -39,6 +50,7 @@ cat > "${APP_DIR}/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key>      <string>local.bobtail.menubar</string>
     <key>CFBundleExecutable</key>      <string>BobTailBar</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
+    <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>CFBundleShortVersionString</key> <string>1.0</string>
     <key>CFBundleVersion</key>         <string>1</string>
     <key>LSMinimumSystemVersion</key>  <string>12.0</string>

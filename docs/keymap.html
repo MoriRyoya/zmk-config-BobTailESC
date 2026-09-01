@@ -6,67 +6,80 @@
   <title>BobTailESC キーマップ</title>
   <style>
     :root {
-      --bg: #0f1115;
-      --panel: #171a21;
-      --key: #22262f;
-      --key-edge: #323846;
-      --ink: #ece8df;
-      --muted: #8b91a0;
-      --hold: #c8a36a;
-      --layer: #6ea8ff;
-      --mod: #9ad0b4;
-      --ime: #e6a0b8;
-      --num: #d4b483;
-      --trans: #2a2e38;
+      --bg: #12141a;
+      --panel: #181b22;
+      --panel-edge: rgba(255, 255, 255, 0.07);
+      --key: #242933;
+      --key-top: #2c323e;
+      --key-edge: #3d4554;
+      --ink: #f0ebe3;
+      --muted: #8b929f;
+      --hold: #d4a574;
+      --layer: #7eb0ff;
+      --mod: #8fcdb0;
+      --ime: #e4a0b6;
+      --num: #e0c08a;
+      --trans: #22262f;
+      --press: #c9a06a;
       --gap: 6px;
-      --unit: 62px;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "SF Pro Text", system-ui, sans-serif; }
+    html, body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "SF Pro Text", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Segoe UI", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
     body { min-height: 100vh; padding: 32px 24px 64px; }
     header { max-width: 980px; margin: 0 auto 28px; }
-    h1 { font-size: 22px; font-weight: 650; margin: 0 0 6px; }
+    h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; margin: 0 0 6px; }
     .lede { color: var(--muted); font-size: 13px; line-height: 1.65; margin: 0; }
     .toolbar { max-width: 980px; margin: 0 auto 18px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .tabs { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
     button.tab, button.os {
       appearance: none; border: 1px solid var(--key-edge); background: var(--panel);
       color: var(--ink); padding: 7px 12px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer;
+      transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
     }
     button.tab[aria-selected="true"], button.os[aria-pressed="true"] {
       background: var(--ink); color: var(--bg); border-color: var(--ink);
     }
     .board-wrap {
       max-width: 980px; margin: 0 auto; background: var(--panel);
-      border: 1px solid #262b35; border-radius: 20px; padding: 18px 12px 12px;
+      border: 1px solid var(--panel-edge); border-radius: 22px; padding: 18px 14px 14px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
     }
     .board {
       position: relative; width: 100%; max-width: 920px; aspect-ratio: 1024 / 594;
-      margin: 0 auto;
+      margin: 0 auto; container-type: inline-size;
     }
     .hw, .keys { position: absolute; inset: 0; }
     .keys { z-index: 1; }
     .case {
       position: absolute;
-      border-radius: 26px;
-      background: #1a1e26;
-      border: 1.5px solid #3a4250;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 22px rgba(0,0,0,0.28);
+      border-radius: 28px;
+      background: linear-gradient(160deg, #1f2430 0%, #151920 100%);
+      border: 1px solid #3a4250;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        inset 0 -10px 18px rgba(0, 0, 0, 0.22),
+        0 14px 28px rgba(0, 0, 0, 0.32);
     }
     .case-l { left: 4.4%; top: 16.16%; width: 42.97%; height: 60.44%; }
     .case-r { left: 53.22%; top: 16.16%; width: 42.09%; height: 60.27%; }
     .enc {
       position: absolute; z-index: 1;
       left: 39.10%; top: 40.36%; width: 5.97%; height: 9.85%;
-      border-radius: 8px; border: 1.5px solid #4a5364;
-      background: #16191f;
+      border-radius: 9px; border: 1px solid #4a5364;
+      background: #14171d;
       display: flex; padding: 3px;
-      box-shadow: 0 2px 0 #0c0e12;
+      box-shadow: 0 2px 0 #0a0c10;
     }
     .enc-slot {
       flex: 1; min-height: 0;
-      border: 1px solid #323846; border-radius: 5px;
-      background: #12141a;
+      border: 1px solid #323846; border-radius: 6px;
+      background: #10131a;
       padding: 3px 4px;
       box-shadow: inset 0 2px 6px rgba(0,0,0,0.55);
     }
@@ -130,86 +143,159 @@
     .tb-hatch-r { width: 100%; height: 100%; border-radius: 4px; }
     .key {
       position: absolute;
-      border-radius: 8px; border: 1.5px solid #4a5364;
-      background: #16191f; color: var(--ink);
-      display: flex; padding: 3px; user-select: none;
-      box-shadow: 0 2px 0 #0c0e12;
+      border-radius: 8px; border: 1px solid var(--key-edge);
+      background: #14181f; color: var(--ink);
+      display: flex; padding: 2.5px; user-select: none;
+      box-shadow: 0 2px 0 #090b0e;
+      transition: border-color 100ms ease, box-shadow 100ms ease, transform 100ms ease;
     }
     .key .face {
-      flex: 1; min-height: 0;
-      border: 1px solid #323846; border-radius: 5px; background: var(--key);
+      flex: 1; min-height: 0; min-width: 0;
+      border: 1px solid #303745; border-radius: 5px;
+      background: linear-gradient(180deg, var(--key-top) 0%, var(--key) 100%);
       display: flex; flex-direction: column; justify-content: space-between;
       padding: 3px 4px 2px;
+      overflow: hidden;
     }
     .key.trans { background: var(--trans); color: #6c7280; box-shadow: none; }
-    .key.trans .face { background: var(--trans); border-style: dashed; }
-    .key.none .face { background: transparent; border-style: dashed; }
+    .key.trans .face { background: var(--trans); border-style: dashed; border-color: #454b57; }
+    .key.none .face { background: transparent; border-style: dashed; border-color: #3a4050; }
     .key.kind-mod .hold { color: var(--mod); }
     .key.kind-layer .hold { color: var(--layer); }
     .key.kind-ime .tap { color: var(--ime); }
     .key.kind-num .tap { color: var(--num); }
     .key.pressed {
-      border-color: #c8a36a;
-      box-shadow: 0 0 0 2px rgba(200,163,106,0.9), 0 2px 0 #0c0e12;
+      border-color: var(--press);
+      transform: translateY(1px);
+      box-shadow: 0 0 0 1.5px rgba(201, 160, 106, 0.85), 0 1px 0 #0c0e12;
     }
     .key.pressed .face {
-      background: #3d3426;
-      border-color: #c8a36a;
+      background: linear-gradient(180deg, #4a3d2c 0%, #3a3124 100%);
+      border-color: var(--press);
     }
-    .hold { font-size: 9px; line-height: 1.05; color: var(--hold); min-height: 10px; }
-    .tap { font-size: 12px; font-weight: 650; line-height: 1.1; }
+    .hold {
+      font-size: clamp(7px, 1.05cqi, 10px);
+      line-height: 1.05;
+      color: var(--hold);
+      min-height: 0.95em;
+      font-weight: 560;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tap {
+      font-size: clamp(9px, 1.45cqi, 13px);
+      font-weight: 650;
+      line-height: 1.12;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tap.long { font-size: clamp(7px, 1.1cqi, 10px); letter-spacing: -0.03em; font-weight: 600; }
     .note { max-width: 980px; margin: 18px auto 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
     .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
     .legend span { display: inline-flex; align-items: center; gap: 6px; }
     .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
     .hud-meta { display: none; }
-    html.hud, html.hud body {
+    .layer-chip {
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 5px 11px;
+      border-radius: 999px;
+      background: rgba(240, 235, 227, 0.94);
+      color: #12141a;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+
+    /* —— HUD / embed: fill the overlay without clipping —— */
+    html.hud, html.hud body,
+    html.embed, html.embed body {
       background: transparent;
       min-height: 0 !important;
       height: 100%;
+      width: 100%;
       overflow: hidden;
     }
     html.hud body, html.embed body,
     body.embed, body.hud {
       min-height: 0;
-      padding: 8px;
+      padding: 0;
+      margin: 0;
     }
     html.hud header, html.embed header,
     html.hud .note, html.embed .note,
     body.embed header, body.hud header,
     body.embed .note, body.hud .note { display: none; }
     html.hud .toolbar, body.hud .toolbar { display: none; }
-    html.hud .hud-meta, body.hud .hud-meta {
-      display: flex;
-      justify-content: flex-end;
-      max-width: 980px;
-      margin: 0 auto 8px;
+
+    html.hud .shell, body.hud .shell,
+    html.embed .shell, body.embed .shell {
+      height: 100%;
+      width: 100%;
+      display: grid;
+      place-items: center;
+      padding: 10px;
+      box-sizing: border-box;
     }
-    body.embed .board-wrap, body.hud .board-wrap {
-      padding: 8px 8px 10px;
-      border-radius: 16px;
+    html.hud .board-wrap, body.hud .board-wrap,
+    html.embed .board-wrap, body.embed .board-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 0;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      container-type: size;
     }
     body.hud .board-wrap {
-      background: rgba(23, 26, 33, 0.92);
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-      border: 1px solid #262b35;
+      background:
+        radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,0.04), transparent 55%),
+        rgba(18, 21, 28, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow:
+        0 18px 48px rgba(0, 0, 0, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(18px) saturate(1.15);
+      -webkit-backdrop-filter: blur(18px) saturate(1.15);
     }
-    .layer-chip {
-      font-size: 11px;
-      font-weight: 650;
-      letter-spacing: 0.06em;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: #ece8df;
-      color: #0f1115;
+    body.embed .board-wrap {
+      background: var(--panel);
+      border: 1px solid var(--panel-edge);
+      box-shadow: none;
+      padding: 8px;
     }
-    body.embed .hold, body.hud .hold { font-size: 8px; min-height: 9px; }
-    body.embed .tap, body.hud .tap { font-size: 10px; }
-    body.embed .key, body.hud .key,
-    body.embed .enc, body.hud .enc { padding: 2px; border-radius: 6px; }
-    body.embed .key .face, body.hud .key .face { padding: 2px 3px 1px; border-radius: 4px; }
-    body.embed .enc-slot, body.hud .enc-slot,
-    body.embed .enc-wheel, body.hud .enc-wheel { border-radius: 4px; }
+    html.hud .board, body.hud .board,
+    html.embed .board, body.embed .board {
+      /* Fit aspect-ratio inside the overlay box without cropping */
+      width: min(100%, calc(100cqh * 1024 / 594));
+      height: auto;
+      max-height: 100%;
+      max-width: 100%;
+      aspect-ratio: 1024 / 594;
+      margin: 0;
+    }
+    html.hud .hud-meta, body.hud .hud-meta {
+      display: block;
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      z-index: 6;
+      margin: 0;
+      pointer-events: none;
+    }
+    html.embed .hud-meta, body.embed .hud-meta { display: none; }
+    body.hud .key, body.embed .key,
+    body.hud .enc, body.embed .enc { padding: 2px; border-radius: 7px; }
+    body.hud .key .face, body.embed .key .face { padding: 2px 3px 1px; border-radius: 4px; }
+    body.hud .case, body.embed .case { border-radius: 24px; }
   </style>
   <script>
     (function () {
@@ -225,7 +311,6 @@
     <h1>BobTailESC キーマップ</h1>
     <p class="lede">図面を CSS でトレースしています。上が長押し、下がタップ。Space / Enter / ⌫ / Fn をクリックすると、そのレイヤーへ飛びます。</p>
   </header>
-  <div class="hud-meta"><span class="layer-chip" id="layer-chip">Base</span></div>
   <div class="toolbar">
     <div class="tabs" id="tabs"></div>
     <div style="display:flex;gap:6px">
@@ -233,28 +318,31 @@
       <button class="os" id="os-win" aria-pressed="false">Windows</button>
     </div>
   </div>
-  <div class="board-wrap">
-    <div class="board" id="board">
-      <div class="hw" aria-hidden="true">
-        <div class="case case-l"></div>
-        <div class="case case-r"></div>
-        <div class="enc" title="エンコーダ"><div class="enc-slot"><div class="enc-wheel"></div></div></div>
-        <div class="tb" title="トラックボール">
-          <div class="tb-hatch tb-hatch-l"></div>
-          <div class="tb-ring"><div class="tb-sphere"></div></div>
-          <div class="tb-frame"><div class="tb-hatch tb-hatch-r"></div></div>
+  <div class="shell">
+    <div class="board-wrap">
+      <div class="hud-meta"><span class="layer-chip" id="layer-chip">Base</span></div>
+      <div class="board" id="board">
+        <div class="hw" aria-hidden="true">
+          <div class="case case-l"></div>
+          <div class="case case-r"></div>
+          <div class="enc" title="エンコーダ"><div class="enc-slot"><div class="enc-wheel"></div></div></div>
+          <div class="tb" title="トラックボール">
+            <div class="tb-hatch tb-hatch-l"></div>
+            <div class="tb-ring"><div class="tb-sphere"></div></div>
+            <div class="tb-frame"><div class="tb-hatch tb-hatch-r"></div></div>
+          </div>
         </div>
+        <div class="keys" id="keys"></div>
       </div>
-      <div class="keys" id="keys"></div>
     </div>
   </div>
   <p class="note" id="note"></p>
   <p class="note">
     <span class="legend">
-      <span><i class="sw" style="background:#c8a36a"></i>長押し</span>
-      <span><i class="sw" style="background:#d4b483"></i>テンキー / Fキー（同位置）</span>
-      <span><i class="sw" style="background:#e6a0b8"></i>英数 / かな</span>
-      <span><i class="sw" style="background:#2a2e38;outline:1px dashed #6c7280"></i>透過</span>
+      <span><i class="sw" style="background:#d4a574"></i>長押し</span>
+      <span><i class="sw" style="background:#e0c08a"></i>テンキー / Fキー（同位置）</span>
+      <span><i class="sw" style="background:#e4a0b6"></i>英数 / かな</span>
+      <span><i class="sw" style="background:#22262f;outline:1px dashed #6c7280"></i>透過</span>
     </span>
   </p>
 <script>
@@ -275,7 +363,7 @@ const BASE_MAC = [
   NO,
   H("?", "Fn", "layer", { goto: "fn" }), T("H"), H("J", "⇧", "mod"), H("K", "⌃", "mod"), H("L", "⌥", "mod"), H(";", "⌘", "mod"),
   T("Z"), T("X"), T("C"), T("V"), T("B"),
-  T("Esc"),
+  T("-"),
   T("⌫"), T("N"), T("M"), T(","), T("."), T("/"),
   T("Tab"), T("⌃", { kind: "mod" }), T("⌘", { kind: "mod" }),
   H("", "Gesture", "layer", { goto: "gesture" }), H("英数", "L⌥", "ime"), H("Space", "Num", "layer", { goto: "num" }),
@@ -293,13 +381,13 @@ const BASE_WIN = BASE_MAC.map((k, i) => ({
 }[i] || k));
 
 const NUM_MAC = [
-  T(".", { kind: "num" }), T("7", { kind: "num" }), T("8", { kind: "num" }), T("9", { kind: "num" }), T("+"),
-  T("行頭"), T("("), T("↑"), T(")"), T("行末"),
+  T(".", { kind: "num" }), T("1", { kind: "num" }), T("2", { kind: "num" }), T("3", { kind: "num" }), T("+"),
+  T("行頭"), TR, T("↑"), TR, T("行末"),
   T("/", { kind: "num" }), T("4", { kind: "num" }), T("5", { kind: "num" }), T("6", { kind: "num" }), T("-"), NO,
-  TR, T("{"), T("←"), T("↓"), T("→"), T("}"),
-  T("0", { kind: "num" }), T("1", { kind: "num" }), T("2", { kind: "num" }), T("3", { kind: "num" }), T("="), TR,
-  T("Del"), T("["), T("]"), T("単語←"), T("単語→"), T("\\"),
-  TR, TR, TR, TR, TR, TR, TR, TR, TR,
+  T("{"), T("}"), T("←"), T("↓"), T("→"), TR,
+  TR, T("7", { kind: "num" }), T("8", { kind: "num" }), T("9", { kind: "num" }), T("="), T("*"),
+  T("("), T(")"), TR, T("単語←"), T("単語→"), T("\\"),
+  TR, TR, T("0", { kind: "num" }), TR, TR, TR, T("["), T("]"), TR,
 ];
 
 const NUM_WIN = NUM_MAC.map((k, i) => ({
@@ -316,7 +404,7 @@ const SYM = [
 ];
 
 const GEST_MAC = [
-  NO, TR, TR, TR, TR,
+  T("Esc"), TR, TR, TR, TR,
   T("範囲SS"), T("戻る"), T("Mission"), T("進む"), T("SS"),
   TR, TR, TR, TR, TR, NO, TR,
   T("窓切替"), T("Desk←"), T("Exposé"), T("Desk→"), T("アプリ"),
@@ -336,12 +424,12 @@ const GEST_WIN = [
 ];
 
 const FN = [
-  T("BT0"), T("F7", { kind: "num" }), T("F8", { kind: "num" }), T("F9", { kind: "num" }), T("F12", { kind: "num" }),
+  T("BT0"), T("F1", { kind: "num" }), T("F2", { kind: "num" }), T("F3", { kind: "num" }), T("F10", { kind: "num" }),
   T("輝度−"), T("輝度＋"), T("前曲"), T("再生"), T("次曲"),
-  T("BT1"), T("F4", { kind: "num" }), T("F5", { kind: "num" }), T("F6", { kind: "num" }), T("F11", { kind: "num" }), NO, TR,
-  T("ミュート"), T("音量−"), T("音量＋"), T("PrtSc"), T("NumLk"),
-  T("BT2"), T("F1", { kind: "num" }), T("F2", { kind: "num" }), T("F3", { kind: "num" }), T("F10", { kind: "num" }), TR, T("CapsW"),
-  T("Mac"), T("Win"), T("出力切替"), T("BT削除"), T("ブート"),
+  T("BT1"), T("F4", { kind: "num" }), T("F5", { kind: "num" }), T("F6", { kind: "num" }), T("F11", { kind: "num" }), NO,
+  TR, T("ミュート"), T("音量−"), T("音量＋"), T("PrtSc"), T("NumLk"),
+  T("BT2"), TR, T("F7", { kind: "num" }), T("F8", { kind: "num" }), T("F9", { kind: "num" }), T("F12", { kind: "num" }),
+  T("CapsW"), T("Mac"), T("Win"), T("出力切替"), T("BT削除"), T("ブート"),
   TR, TR, TR, TR, TR, TR, TR, TR, TR,
 ];
 
@@ -355,8 +443,8 @@ const MOUSE = [
 
 const NOTES = {
   base: "親指の内側4つが 英数 / Space / Enter / かな。英数・かなは長押しで L⌥ / R⌥。その左隣（旧英数）が Gesture。? はタップで ?、長押しで Fn。",
-  num: "左手テンキー。. と / は Q と A。最下行の外側は透過のままです。* は Sym 層。⌫ 位置は Delete。",
-  fn: "F1–F9 は数字と同じ位置。F12/F11/F10 は +/−/= の列。BT0–2 は Q/A/Z。Caps Word は ⌫ の位置。? 長押し、右下、または Space+Enter で出ます。最下行は使いません。",
+  num: "左手テンキー。上段が 1 2 3、中段が 4 5 6、下段が 7 8 9。0 は ⌘ の位置。* は - の内側。括弧は {} がホーム、() がその下、[] が親指。",
+  fn: "F1–F9 は数字と同じ位置（1→F1）。F10 は + の列。BT0/BT1 は Q/A、BT2 は Z。Caps Word は ⌫ の位置。? 長押し、右下、または Space+Enter で出ます。最下行は使いません。",
   sym: "Num に無い記号。* もここにあります。ここの ⌫ 位置も Delete です。",
   gesture: "Gesture 押しながらボールをフリック。上=Mission Control、下=App Exposé、左右=デスクトップ切替。変換はキーボード本体で行うので、BobTailBar なしでも動きます。",
   mouse: "ボール操作中のクリックはホーム段。中クリックはタップでクリック、長押しでスクロール。Gesture は旧英数の位置（この層でも同じキー）です。",
@@ -393,6 +481,8 @@ function layerLabel(id) {
 }
 
 function keysFor(id) {
+  const live = liveKeys(id);
+  if (live) return live;
   const win = os === "win";
   if (id === "base") return win ? BASE_WIN : BASE_MAC;
   if (id === "num") return win ? NUM_WIN : NUM_MAC;
@@ -416,7 +506,7 @@ function render() {
 
   const keysEl = document.getElementById("keys");
   keysEl.innerHTML = "";
-  const pad = { x: 0.35, y: 0.55, w: 0.7, h: 1.1 };
+  const pad = { x: 0.28, y: 0.4, w: 0.55, h: 0.85 };
   const place = (el, box) => {
     el.style.left = (box.x - pad.x) + "%";
     el.style.top = (box.y - pad.y) + "%";
@@ -441,7 +531,11 @@ function render() {
     if (pressed.includes(i)) div.classList.add("pressed");
     div.dataset.i = String(i);
     place(div, box);
-    div.innerHTML = `<div class="face"><div class="hold">${key.hold || ""}</div><div class="tap">${key.tap || ""}</div></div>`;
+    const tap = key.tap || "";
+    const tapClass = tap.length >= 4 ? "tap long" : "tap";
+    const title = [key.hold, tap].filter(Boolean).join(" / ");
+    if (title) div.title = title;
+    div.innerHTML = `<div class="face"><div class="hold">${key.hold || ""}</div><div class="${tapClass}">${tap}</div></div>`;
     if (key.goto) {
       div.style.cursor = "pointer";
       div.addEventListener("click", () => { current = key.goto; render(); });
@@ -459,6 +553,38 @@ function render() {
 document.getElementById("os-mac").addEventListener("click", () => { os = "mac"; render(); });
 document.getElementById("os-win").addEventListener("click", () => { os = "win"; render(); });
 render();
+
+window.setBobTailKeymap = function(data) {
+  if (!data || !Array.isArray(data.layers)) {
+    window.__bobtailLive = null;
+    render();
+    return;
+  }
+  window.__bobtailLive = data;
+  const next = [];
+  for (const layer of data.layers) {
+    if (layer && layer.id && layer.id !== "scroll") {
+      next.push({ id: layer.id, name: layer.name || layer.id });
+    }
+  }
+  if (next.length) {
+    LAYERS.splice(0, LAYERS.length, ...next);
+  }
+  if (!LAYERS.some((item) => item.id === current) && LAYERS[0]) {
+    current = LAYERS[0].id;
+  }
+  render();
+};
+
+function liveKeys(id) {
+  const data = window.__bobtailLive;
+  if (!data || !Array.isArray(data.layers)) return null;
+  const want = id === "scroll" ? "mouse" : id;
+  const layer = data.layers.find((item) => item.id === want);
+  if (!layer) return null;
+  const pack = os === "win" && Array.isArray(layer.win) && layer.win.length ? layer.win : layer.mac;
+  return Array.isArray(pack) ? pack : null;
+}
 
 window.setBobTailAppearance = function(mode) {
   applyAppearance(mode);
