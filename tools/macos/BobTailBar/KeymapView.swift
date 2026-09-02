@@ -152,6 +152,15 @@ struct KeymapPalette {
     )
 }
 
+private extension NSColor {
+    /// ユーザーが選んだ色が明るくても暗くても読める文字色を選ぶ。
+    var readableOnColor: NSColor {
+        guard let rgb = usingColorSpace(.deviceRGB) else { return .white }
+        let luminance = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
+        return luminance > 0.6 ? .black : .white
+    }
+}
+
 // MARK: - テキスト描画
 
 private enum CapText {
@@ -271,7 +280,7 @@ final class KeymapBoardView: NSView {
         }
 
         if isPressed {
-            palette.accent.setFill()
+            Preferences.shared.keymapPressedColor.setFill()
             path.fill()
         } else if key.trans {
             palette.transFill.setFill()
@@ -295,8 +304,9 @@ final class KeymapBoardView: NSView {
         let tapColor: NSColor
         let holdColor: NSColor
         if isPressed {
-            tapColor = palette.onAccent
-            holdColor = palette.onAccent.withAlphaComponent(0.72)
+            let onPressed = Preferences.shared.keymapPressedColor.readableOnColor
+            tapColor = onPressed
+            holdColor = onPressed.withAlphaComponent(0.72)
         } else if key.trans {
             tapColor = palette.transText
             holdColor = palette.transText
@@ -396,6 +406,7 @@ final class KeymapHUDView: NSView {
         let battery = "L " + (left.map { "\($0)%" } ?? "—") + "   R " + (right.map { "\($0)%" } ?? "—")
         guard layerTitle != self.layerTitle || badge != layerBadge || os != osTitle
             || battery != batteryText || source != sourceText || warning != warningText else { return }
+        let warningChanged = warning != warningText
         self.layerTitle = layerTitle
         self.layerBadge = badge
         self.osTitle = os
@@ -403,6 +414,8 @@ final class KeymapHUDView: NSView {
         self.sourceText = source
         self.warningText = warning
         needsDisplay = true
+        // 警告の有無でクリック判定の当たり判定と、それに対応するカーソルが変わる
+        if warningChanged { window?.invalidateCursorRects(for: self) }
     }
 
     /// 帯の上か（クリック透過中でもここだけは掴めるようにする）
@@ -415,6 +428,12 @@ final class KeymapHUDView: NSView {
         point.x >= bounds.maxX - Self.gripSize && point.y >= bounds.maxY - Self.gripSize
     }
 
+    /// 追従できていない警告文の上か。ここだけは帯のドラッグより優先して
+    /// タップとして扱う（クリックで許可設定へ飛ぶ）。
+    func isInWarning(_ point: NSPoint) -> Bool {
+        !warningText.isEmpty && warningRect.contains(point)
+    }
+
     // MARK: マウス
 
     var onDragBegin: ((NSPoint) -> Void)?
@@ -423,9 +442,14 @@ final class KeymapHUDView: NSView {
     var onResizeBegin: ((NSPoint) -> Void)?
     var onResizeMove: ((NSPoint) -> Void)?
     var onResizeEnd: (() -> Void)?
+    /// 警告文をクリックしたとき。ドラッグに変わらずタップで終わった場合だけ呼ぶ。
+    var onWarningTap: (() -> Void)?
 
-    private enum Grab { case idle, move, resize }
+    private enum Grab { case idle, move, resize, warningPending }
     private var grab = Grab.idle
+    private var warningDownLocal: NSPoint?
+    /// draw(_:) で最後に計算した警告文の当たり判定。テキストの位置と常に一致させる。
+    private var warningRect: NSRect = .zero
 
     /// パネルは非アクティブのままなので、最初のクリックから受け取れるようにする
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -434,6 +458,9 @@ final class KeymapHUDView: NSView {
         super.resetCursorRects()
         addCursorRect(NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight),
                       cursor: .openHand)
+        if !warningText.isEmpty {
+            addCursorRect(warningRect, cursor: .pointingHand)
+        }
         addCursorRect(NSRect(x: bounds.maxX - Self.gripSize, y: bounds.maxY - Self.gripSize,
                              width: Self.gripSize, height: Self.gripSize),
                       cursor: .crosshair)
@@ -449,6 +476,12 @@ final class KeymapHUDView: NSView {
         if isInGrip(local) {
             grab = .resize
             onResizeBegin?(screenPoint(event))
+        } else if isInWarning(local) {
+            // すぐドラッグにはせず、動かないまま離されたらタップとして扱う。
+            // 帯のどこでも掴めるようにしてある都合上、警告文の上も本来は
+            // ドラッグ開始点になり得るため
+            grab = .warningPending
+            warningDownLocal = local
         } else if isInHeader(local) {
             grab = .move
             onDragBegin?(screenPoint(event))
@@ -462,6 +495,14 @@ final class KeymapHUDView: NSView {
         switch grab {
         case .move: onDragMove?(screenPoint(event))
         case .resize: onResizeMove?(screenPoint(event))
+        case .warningPending:
+            let local = convert(event.locationInWindow, from: nil)
+            guard let start = warningDownLocal else { break }
+            if hypot(local.x - start.x, local.y - start.y) > 4 {
+                // 動いたのでドラッグに切り替える
+                grab = .move
+                onDragBegin?(screenPoint(event))
+            }
         case .idle: super.mouseDragged(with: event)
         }
     }
@@ -470,9 +511,11 @@ final class KeymapHUDView: NSView {
         switch grab {
         case .move: onDragEnd?()
         case .resize: onResizeEnd?()
+        case .warningPending: onWarningTap?()
         case .idle: super.mouseUp(with: event)
         }
         grab = .idle
+        warningDownLocal = nil
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -483,11 +526,12 @@ final class KeymapHUDView: NSView {
         let badgeSide: CGFloat = 18
         let badgeRect = NSRect(x: 12, y: (Self.headerHeight - badgeSide) / 2,
                                width: max(badgeSide, 30), height: badgeSide)
+        let layerColor = Preferences.shared.layerActiveColor
         let badgePath = NSBezierPath(roundedRect: badgeRect, xRadius: 5, yRadius: 5)
-        palette.accent.withAlphaComponent(0.22).setFill()
+        layerColor.withAlphaComponent(0.22).setFill()
         badgePath.fill()
         CapText.draw(layerBadge, in: badgeRect, maxSize: 10, minSize: 7,
-                     weight: .bold, color: palette.accent)
+                     weight: .bold, color: layerColor)
 
         let titleRect = NSRect(x: badgeRect.maxX + 8, y: 0,
                                width: 180, height: Self.headerHeight)
@@ -498,10 +542,12 @@ final class KeymapHUDView: NSView {
         let rightColor = warningText.isEmpty
             ? palette.plateFaint
             : NSColor.systemRed.blended(withFraction: 0.15, of: palette.plateText) ?? .systemRed
-        drawRight(rightText, in: NSRect(x: badgeRect.maxX + 200, y: 0,
-                                        width: max(60, header.width - badgeRect.maxX - 212),
-                                        height: Self.headerHeight),
-                  size: 11, weight: .medium, color: rightColor)
+        let rightRect = NSRect(x: badgeRect.maxX + 200, y: 0,
+                               width: max(60, header.width - badgeRect.maxX - 212),
+                               height: Self.headerHeight)
+        // クリック判定は draw() のたびに引き直す。テキストの位置とズレないようにするため
+        warningRect = warningText.isEmpty ? .zero : rightRect
+        drawRight(rightText, in: rightRect, size: 11, weight: .medium, color: rightColor)
 
         // 帯と配列のあいだの細い区切り
         let line = NSBezierPath(rect: NSRect(x: 10, y: Self.headerHeight - 1,

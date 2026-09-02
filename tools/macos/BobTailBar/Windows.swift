@@ -89,6 +89,9 @@ final class KeymapOverlayController: NSWindowController {
         hud.onResizeBegin = { [weak self] point in self?.beginResize(at: point) }
         hud.onResizeMove = { [weak self] point in self?.continueResize(to: point) }
         hud.onResizeEnd = { [weak self] in self?.endResize() }
+        // 他アプリで作業中でも読めるのはここだけなので、赤い警告はメニューを
+        // 開かなくても直接クリックで足りない許可の設定パネルへ飛べるようにする
+        hud.onWarningTap = { Permissions.openWhicheverIsMissing() }
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(prefsChanged), name: Preferences.didChange, object: nil)
@@ -196,6 +199,10 @@ final class KeymapOverlayController: NSWindowController {
 
     @objc private func prefsChanged() {
         applyStoredSize()
+        // 色を変えただけだとキーの内容や押下状態は変わらないので、pushState() の
+        // 変化検知だけでは再描画されない。強制的に描き直す
+        hud.board.needsDisplay = true
+        hud.needsDisplay = true
         sync()
     }
 
@@ -333,6 +340,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     private let clickThroughBox = NSButton(checkboxWithTitle: "配列の上のクリックは下のアプリへ通す", target: nil, action: nil)
     private let hideOnBaseBox = NSButton(checkboxWithTitle: "ベース（ABC）では隠す", target: nil, action: nil)
     private let highlightBox = NSButton(checkboxWithTitle: "押しているキーを強調表示する", target: nil, action: nil)
+    private let pressedColorWell = NSColorWell()
+    private let layerColorWell = NSColorWell()
     private let opacity = NSSlider()
     private let opacityLabel = NSTextField(labelWithString: "")
     private let overlayScale = NSSlider()
@@ -494,6 +503,24 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         highlightBox.target = self
         highlightBox.action = #selector(overlayChanged)
 
+        pressedColorWell.target = self
+        pressedColorWell.action = #selector(pressedColorChanged)
+        let pressedColorReset = NSButton(title: "既定に戻す", target: self, action: #selector(resetPressedColor))
+        let pressedColorControls = NSStackView(views: [pressedColorWell, pressedColorReset])
+        pressedColorControls.orientation = NSUserInterfaceLayoutOrientation.horizontal
+        pressedColorControls.spacing = 8
+        let pressedColorRow = labeled("押しているキーの色", pressedColorControls)
+
+        layerColorWell.target = self
+        layerColorWell.action = #selector(layerColorChanged)
+        let layerColorReset = NSButton(title: "既定に戻す", target: self, action: #selector(resetLayerColor))
+        let layerColorControls = NSStackView(views: [layerColorWell, layerColorReset])
+        layerColorControls.orientation = NSUserInterfaceLayoutOrientation.horizontal
+        layerColorControls.spacing = 8
+        let layerColorRow = labeled("レイヤー中の色", layerColorControls)
+        let layerColorHint = NSTextField(wrappingLabelWithString: "メニューバーの文字と、重ね表示のバッジに使います。既定はどちらもシステムのアクセントカラーです。")
+        layerColorHint.textColor = .secondaryLabelColor
+
         opacity.minValue = 0
         opacity.maxValue = 0.75
         opacity.target = self
@@ -604,6 +631,9 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             overlayBox,
             hideOnBaseBox,
             highlightBox,
+            pressedColorRow,
+            layerColorRow,
+            layerColorHint,
             opacityRow,
             opacityLabel,
             scaleRow,
@@ -621,7 +651,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         stack.spacing = 10
         opacity.widthAnchor.constraint(equalToConstant: 220).isActive = true
         overlayScale.widthAnchor.constraint(equalToConstant: 220).isActive = true
-        stretch([hint, keymapPreview, overlayHint, githubBox, folderBox, keymapSourceStatus],
+        stretch([hint, keymapPreview, overlayHint, layerColorHint, githubBox, folderBox, keymapSourceStatus],
                 to: stack)
         return scrollable(stack)
     }
@@ -802,6 +832,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         prefs.keymapOverlayClickThrough = clickThroughBox.state == .on
         prefs.keymapOverlayHideOnBase = hideOnBaseBox.state == .on
         prefs.keymapHighlightPressed = highlightBox.state == .on
+        pressedColorWell.isEnabled = prefs.keymapHighlightPressed
         prefs.keymapOverlayOpacity = 1 - opacity.doubleValue
         let scale = overlayScale.doubleValue
         prefs.keymapOverlayScale = scale
@@ -811,6 +842,29 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         )
         refreshLabels()
         AppWindows.shared.syncKeymap()
+    }
+
+    /// 押しているキーの色を変えたら、その場でプレビューにも反映する
+    @objc private func pressedColorChanged() {
+        guard !isReloading else { return }
+        Preferences.shared.keymapPressedColor = pressedColorWell.color
+        keymapPreview.needsDisplay = true
+    }
+
+    @objc private func resetPressedColor() {
+        Preferences.shared.resetKeymapPressedColor()
+        pressedColorWell.color = Preferences.shared.keymapPressedColor
+        keymapPreview.needsDisplay = true
+    }
+
+    @objc private func layerColorChanged() {
+        guard !isReloading else { return }
+        Preferences.shared.layerActiveColor = layerColorWell.color
+    }
+
+    @objc private func resetLayerColor() {
+        Preferences.shared.resetLayerActiveColor()
+        layerColorWell.color = Preferences.shared.layerActiveColor
     }
 
     @objc private func placeOverlay(_ sender: NSButton) {
@@ -934,6 +988,9 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         clickThroughBox.state = prefs.keymapOverlayClickThrough ? .on : .off
         hideOnBaseBox.state = prefs.keymapOverlayHideOnBase ? .on : .off
         highlightBox.state = prefs.keymapHighlightPressed ? .on : .off
+        pressedColorWell.color = prefs.keymapPressedColor
+        pressedColorWell.isEnabled = prefs.keymapHighlightPressed
+        layerColorWell.color = prefs.layerActiveColor
         opacity.doubleValue = 1 - prefs.keymapOverlayOpacity
         overlayScale.doubleValue = prefs.keymapOverlayScale
         follow.state = prefs.osSource == "keyboard" ? .on : .off

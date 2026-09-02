@@ -177,6 +177,18 @@ enum Permissions {
     static func openAccessibilitySettings() { openPane("Privacy_Accessibility") }
     static func openInputMonitoringSettings() { openPane("Privacy_ListenEvent") }
 
+    /// 足りない許可の設定パネルを開く。両方足りなければアクセシビリティから。
+    /// メニューの赤い行と、HUD の警告文の両方から呼ぶための共通経路。
+    static func openWhicheverIsMissing() {
+        if !accessibility {
+            requestAccessibility()
+            openAccessibilitySettings()
+        } else if !inputMonitoring {
+            requestInputMonitoring()
+            openInputMonitoringSettings()
+        }
+    }
+
     private static func openPane(_ anchor: String) {
         guard let url = URL(string:
             "x-apple.systempreferences:com.apple.preference.security?\(anchor)") else { return }
@@ -719,6 +731,9 @@ final class StatusController: NSObject {
         menu.addItem(leftItem)
         menu.addItem(rightItem)
         menu.addItem(statusItemRow)
+
+        monitorItem.target = self
+        monitorItem.action = #selector(fixPermissions)
         menu.addItem(monitorItem)
 
         permissionItem.target = self
@@ -743,20 +758,16 @@ final class StatusController: NSObject {
         let quit = NSMenuItem(title: "終了", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
 
-        [layerItem, modeItem, leftItem, rightItem, statusItemRow, monitorItem].forEach { $0.isEnabled = false }
+        [layerItem, modeItem, leftItem, rightItem, statusItemRow].forEach { $0.isEnabled = false }
+        // monitorItem だけは別: 追従できていない（赤い）ときだけ押せるようにして、
+        // クリックでそのまま足りない許可の設定パネルへ飛べるようにする。isEnabled は render() で管理する
+        monitorItem.isEnabled = false
     }
 
     var batteryMonitor: BatteryMonitor?
 
-    /// 足りない許可の設定パネルを開く。両方足りなければアクセシビリティから。
     @objc private func fixPermissions() {
-        if !Permissions.accessibility {
-            Permissions.requestAccessibility()
-            Permissions.openAccessibilitySettings()
-        } else if !Permissions.inputMonitoring {
-            Permissions.requestInputMonitoring()
-            Permissions.openInputMonitoringSettings()
-        }
+        Permissions.openWhicheverIsMissing()
     }
 
     @objc private func toggleGesture() {
@@ -789,6 +800,7 @@ final class StatusController: NSObject {
         rightItem.attributedTitle = batteryRow(label: "右 (R)", value: state.rightBattery)
         statusItemRow.title = state.bluetoothStatus
         monitorItem.attributedTitle = monitorRow(state: state)
+        monitorItem.isEnabled = !state.globalTracking
         renderPermissionItem()
         gestureItem.state = prefs.gestureEnabled ? .on : .off
         keymapItem.state = prefs.keymapOverlayEnabled ? .on : .off
@@ -825,7 +837,7 @@ final class StatusController: NSObject {
         let text = prefs.composeMenubar(state: state)
         let font = NSFont.monospacedDigitSystemFont(ofSize: prefs.menubarFontSize, weight: .semibold)
         let holding = state.layerId != "base"
-        let color: NSColor = holding ? .controlAccentColor : .labelColor
+        let color: NSColor = holding ? prefs.layerActiveColor : .labelColor
         return NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
     }
 

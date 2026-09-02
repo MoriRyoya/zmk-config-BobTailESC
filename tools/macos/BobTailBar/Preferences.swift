@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import ServiceManagement
 
@@ -164,6 +165,40 @@ final class Preferences {
     var keymapHighlightPressed: Bool {
         get { defaults.object(forKey: "keymapHighlightPressed") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "keymapHighlightPressed"); ping() }
+    }
+
+    /// レイヤーを保持している間に使う色。メニューバーの文字と HUD のバッジに使う。
+    /// 既定値は未設定＝システムのアクセントカラーに追従する。
+    var layerActiveColor: NSColor {
+        get { Self.storedColor(forKey: "layerActiveColor") ?? .controlAccentColor }
+        set { Self.storeColor(newValue, forKey: "layerActiveColor"); ping() }
+    }
+
+    func resetLayerActiveColor() {
+        defaults.removeObject(forKey: "layerActiveColor")
+        ping()
+    }
+
+    /// 配列上で押しているキーを塗る色。既定値は未設定＝アクセントカラー。
+    var keymapPressedColor: NSColor {
+        get { Self.storedColor(forKey: "keymapPressedColor") ?? .controlAccentColor }
+        set { Self.storeColor(newValue, forKey: "keymapPressedColor"); ping() }
+    }
+
+    func resetKeymapPressedColor() {
+        defaults.removeObject(forKey: "keymapPressedColor")
+        ping()
+    }
+
+    private static func storedColor(forKey key: String) -> NSColor? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data)
+    }
+
+    private static func storeColor(_ color: NSColor, forKey key: String) {
+        guard let data = try? NSKeyedArchiver.archivedData(withRootObject: color, requiringSecureCoding: true)
+        else { return }
+        UserDefaults.standard.set(data, forKey: key)
     }
 
     /// auto / folder / github / bundled
