@@ -45,7 +45,9 @@
 #define LAYER_INDICATOR 1
 #define IND_NUM  F13
 #define IND_SYM  F16   /* F14/F15 は輝度。F21 は macOS がキーイベントにしない */
-#define IND_SCRL K_HELP
+/* Scroll 通知は F22。Help だと BobTailBar が飲み込めないとき Finder が
+   カーソル下のフォルダを選択してしまう */
+#define IND_SCRL F22
 #define IND_GEST F17
 #define IND_FN   F18
 #define IND_MAC  F19
@@ -125,13 +127,15 @@
             bindings = <HOLD_SYM>, <&kp>;
         };
 
-        /* 中クリック: タップで MB3、長押しでボールをスクロール (SCRL 層) */
+        /* 中クリック: タップで MB3、長押しでボールをスクロール (SCRL 層)。
+           hold-preferred にして、押しながらすぐ転がしても先にカーソルが
+           動いて Finder のフォルダを掴みにくくする */
 
         lt_scrl: layer_tap_scroll {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
-            flavor = "balanced";
-            tapping-term-ms = <180>;
+            flavor = "hold-preferred";
+            tapping-term-ms = <120>;
             quick-tap-ms = <175>;
             bindings = <HOLD_SCRL>, <&mkp>;
         };
@@ -355,13 +359,14 @@
         };
 
         /* ボールをスクロールにする内部層。専用キーは無い。中クリック長押しで乗る。
-           キーはすべて透過して、下の Mouse 層のクリックを残す */
+           マウスボタンは無効。透過のままだと J の左クリックが残り、
+           Finder でカーソル下のフォルダが選択される */
 
         scroll_layer {
             display-name = "Scroll";
             bindings = <
 &trans  &trans  &trans  &trans  &trans                      &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &none       &trans  &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans  &none       &trans  &none   &none   &trans  &none   &none
 &trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans                          &trans
             >;

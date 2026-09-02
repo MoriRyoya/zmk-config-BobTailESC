@@ -92,7 +92,7 @@ cd tools/macos/BobTailBar
 | --- | --- |
 | F13 | Num+Nav |
 | F16 | Sym（F15 は輝度＋、F21 は macOS が無視するので使わない） |
-| Help | Scroll |
+| F22 | Scroll（旧ファームウェアは Help） |
 | F17 | Gesture |
 | F18 | Fn |
 | F19 | macOS モード |

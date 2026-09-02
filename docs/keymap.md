@@ -163,6 +163,7 @@ Num 層に無い記号だけです。括弧と演算子は Num 側にありま�
 
 - `H J K L ;` がマウスボタンです。
 - **中クリック（K）** はタップで中クリック、長押しでボールがスクロールになります。
+- スクロール中は `H J L ;` のマウスボタンを無効にしています。残しておくと Finder でカーソル下のフォルダが選択されます。
 - Gesture は Base と同じく旧英数の位置です。ボール操作中もそのまま押せます。
 
 ---
@@ -219,6 +220,6 @@ python3 tools/check_keymap.py
 | --- | --- |
 | ホームロー修飾キーの効きを変える | `hml` / `hmr` の `tapping-term-ms`、`require-prior-idle-ms` |
 | ホームロー修飾キーをやめる | Base 層の `&hml LGUI A` などを `&kp A` に置き換える |
-| レイヤー通知（F13 / F16–F20 と Help）を止める | 先頭の `#define LAYER_INDICATOR 1` を `0` にする |
+| レイヤー通知（F13 / F16–F20 / F22）を止める | 先頭の `#define LAYER_INDICATOR 1` を `0` にする |
 | エンコーダの割り当て | 各レイヤーの `sensor-bindings` |
 | トラックボールの感度 | `config/boards/shields/Test/BobTail_R.conf` の `CONFIG_PMW3610_CPI` |

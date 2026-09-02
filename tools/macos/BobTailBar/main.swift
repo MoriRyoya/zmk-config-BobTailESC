@@ -2,9 +2,10 @@
 //  BobTailBar — BobTailESC 用 macOS メニューバー常駐アプリ
 //
 //  1. 現在のレイヤーをメニューバーにリアルタイム表示する
-//     キーボードは各レイヤーを保持している間 F13 / F16–F18 と Help を押しっぱなしにする。
-//     F14 / F15 は macOS の輝度キー、F21 はキーイベントにならないので使わない。
-//     本アプリはそれを横取りして表示に変え、他アプリには渡さない。
+//     キーボードは各レイヤーを保持している間 F13 / F16–F18 / F22 を押しっぱなしにする。
+//     F14 / F15 は macOS の輝度キー。F21 / F22 はキーイベントにならないので
+//     アプリへ漏れない（Scroll は F22。昔の Help も HID で読む）。
+//     本アプリは HID で受け取って表示に変え、CGEvent になるキーは他アプリに渡さない。
 //  2. 左右それぞれのバッテリー残量を % で表示する
 //     ZMK が公開する 2 つの Battery Service を CoreBluetooth で直接読む。
 //  3. ジェスチャのボール変換はファームウェア側。本アプリはレイヤー表示とバッテリー用
@@ -20,7 +21,7 @@ import IOKit.hid
 enum IndicatorKey {
     static let num: Int64 = 105     // F13  Num+Nav
     static let sym: Int64 = 106     // F16  (F15 は輝度＋、F21 は macOS が無視)
-    static let scroll: Int64 = 114  // Help
+    static let scroll: Int64 = 114  // 内部 ID（旧 Help の仮想キーコード。F22 は CGEvent にならない）
     static let gesture: Int64 = 64  // F17
     static let fn: Int64 = 79       // F18
     static let macMode: Int64 = 80  // F19
@@ -28,12 +29,13 @@ enum IndicatorKey {
 
     static let all: Set<Int64> = [num, sym, scroll, gesture, fn, macMode, winMode]
 
-    /// USB HID Keyboard usage → macOS 仮想キーコード
+    /// USB HID Keyboard usage → 内部 ID
     static func fromHIDUsage(_ usage: UInt32) -> Int64? {
         switch usage {
         case 0x68: return num      // F13
         case 0x6B: return sym      // F16
-        case 0x75: return scroll   // Help
+        case 0x71: return scroll   // F22（現行。macOS はキーイベントにしない）
+        case 0x75: return scroll   // Help（旧ファームウェア）
         case 0x6C: return gesture  // F17
         case 0x6D: return fn       // F18
         case 0x6E: return macMode  // F19
