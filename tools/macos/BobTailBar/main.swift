@@ -393,10 +393,12 @@ final class EventTapMonitor {
     private let gestures = GestureEngine()
 
     func start() {
-        // どちらも「未決定」のときだけダイアログが出る。拒否済みなら黙って false
-        Permissions.requestAccessibility()
-        Permissions.requestInputMonitoring()
-
+        // ここでは許可を「見る」だけで「求め」ない。AXIsProcessTrustedWithOptions /
+        // IOHIDRequestAccess は未決定の状態で呼ぶと本物のシステムダイアログが立ち、
+        // 起動のたびに 2 枚重なって出ていた（しかも Apple 側の既知の不具合で、
+        // アクセシビリティを先に確認すると入力監視のダイアログが出なくなることがある
+        // — rdar://7381305）。許可を実際に求めるのは、ユーザーが赤い行や HUD の警告を
+        // クリックして Permissions.openWhicheverIsMissing() を呼んだときだけにする
         startHID()
         startGlobalMonitor()
         tryStartTap()
@@ -978,10 +980,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         KeymapSource.shared.start()
         AppWindows.shared.prepareKeymapOverlay()
-
-        _ = AXIsProcessTrustedWithOptions(
-            [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        )
 
         let tap = EventTapMonitor()
         self.tap = tap
