@@ -40,6 +40,7 @@ swiftc -O \
     -framework ServiceManagement \
     -framework IOKit \
     -framework CoreServices \
+    -framework Security \
     -o "${MACOS_DIR}/${APP_NAME}" \
     main.swift Preferences.swift KeymapView.swift Windows.swift Gesture.swift KeymapSource.swift
 
@@ -78,6 +79,8 @@ if [[ "${IDENTITY}" == "-" ]]; then
     「アクセシビリティ」と「入力監視」の許可が毎回外れます。
     外れている間はレイヤー表示が他アプリで追従しません
     （メニューの「キー監視」が赤くなります）。
+    GitHub トークンを Keychain に保存している場合も、同じ理由で
+    ビルドのたびに読めなくなり、設定画面には毎回入力し直しになります。
 
     毎回やり直したくない場合は、キーチェーンアクセスで
     「BobTailBar Local」という名前のコード署名用の自己署名証明書を作ってください。

@@ -1,10 +1,57 @@
 import AppKit
 import Foundation
+import Security
 import ServiceManagement
 
 struct MenuBarToken: Codable, Equatable {
     var id: String
     var enabled: Bool
+}
+
+/// GitHub の個人アクセストークンを Keychain に置く。
+/// UserDefaults はただの plist で、同じユーザーで動く他のプロセスなら
+/// `defaults read` 一発で読めてしまう。Contents: Read だけとはいえ
+/// 非公開リポジトリの中身が見えるトークンなので、平文で置いたままにしない。
+private enum GitHubTokenKeychain {
+    private static let service = "local.bobtail.menubar.github-token"
+    private static let account = "github-pat"
+
+    static func load() -> String {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let token = String(data: data, encoding: .utf8)
+        else { return "" }
+        return token
+    }
+
+    static func save(_ token: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        if token.isEmpty {
+            SecItemDelete(query as CFDictionary)
+            return
+        }
+        let data = Data(token.utf8)
+        let update: [String: Any] = [kSecValueData as String: data]
+        if SecItemUpdate(query as CFDictionary, update as CFDictionary) == errSecItemNotFound {
+            var item = query
+            item[kSecValueData as String] = data
+            // このマシンのこのユーザーだけ、ロック解除後に読める。iCloud 同期はしない
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            SecItemAdd(item as CFDictionary, nil)
+        }
+    }
 }
 
 final class Preferences {
@@ -233,9 +280,25 @@ final class Preferences {
         set { defaults.set(newValue, forKey: "keymapGitHubPath"); ping() }
     }
 
+    /// Keychain 保存。旧バージョンが UserDefaults に平文で残していた分は
+    /// 最初のアクセスで拾い上げて Keychain へ移し、plist からは消す。
     var keymapGitHubToken: String {
-        get { defaults.string(forKey: "keymapGitHubToken") ?? "" }
-        set { defaults.set(newValue, forKey: "keymapGitHubToken"); ping() }
+        get {
+            migrateLegacyGitHubTokenIfNeeded()
+            return GitHubTokenKeychain.load()
+        }
+        set {
+            GitHubTokenKeychain.save(newValue)
+            ping()
+        }
+    }
+
+    private func migrateLegacyGitHubTokenIfNeeded() {
+        guard let legacy = defaults.string(forKey: "keymapGitHubToken"), !legacy.isEmpty else { return }
+        if GitHubTokenKeychain.load().isEmpty {
+            GitHubTokenKeychain.save(legacy)
+        }
+        defaults.removeObject(forKey: "keymapGitHubToken")
     }
 
     /// bottomRight / bottomLeft / topRight / topLeft
@@ -317,6 +380,11 @@ final class Preferences {
             } catch {
                 defaults.set(!enabled, forKey: "launchAtLogin")
             }
+        } else {
+            // SMAppService は macOS 13 以降専用。LSMinimumSystemVersion は 12.0 なので、
+            // ここに来ることがある。何もしないと「チェックは入っているのに実際には
+            // 登録されていない」という嘘の状態のまま UserDefaults に残ってしまう
+            defaults.set(false, forKey: "launchAtLogin")
         }
     }
 }

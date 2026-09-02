@@ -697,7 +697,14 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         let wrap = inset()
         loginBox.target = self
         loginBox.action = #selector(changed)
-        let note = NSTextField(wrappingLabelWithString: "ログイン時起動は /Applications に入れた BobTailBar.app に対して有効です。")
+        var noteText = "ログイン時起動は /Applications に入れた BobTailBar.app に対して有効です。"
+        if #unavailable(macOS 13.0) {
+            // 登録に使う SMAppService は macOS 13 以降専用。それより前では
+            // チェックできても実際には何も起きないので、押せないようにしておく
+            loginBox.isEnabled = false
+            noteText += " macOS 13 以降が必要です（このアプリでは登録できません）。"
+        }
+        let note = NSTextField(wrappingLabelWithString: noteText)
         note.textColor = .secondaryLabelColor
         let stack = NSStackView(views: [loginBox, note])
         stack.orientation = NSUserInterfaceLayoutOrientation.vertical

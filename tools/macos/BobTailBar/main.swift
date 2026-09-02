@@ -171,13 +171,18 @@ enum KeyHighlight {
 
 // MARK: - 権限
 
-/// レイヤー表示が他アプリ使用中も追従するには、2 つの許可が要る。
+/// 2 つの許可があるが、対等ではない。
 ///
-///   アクセシビリティ … CGEvent タップ。通知キーを他アプリに漏らさず飲み込む
-///   入力監視         … IOHID。キーボードから直接読む
+///   入力監視         … IOHID。レイヤー通知（Num/Sym/Gesture/Fn/Mac/Win/Scroll）は
+///                       すべて CGEvent を一切発生させない usage で送っているので
+///                       （config/BobTail.keymap の IND_* 定義そばを参照）、
+///                       レイヤー表示が他アプリ使用中も追従するには、これが無いと
+///                       始まらない。無いと「BobTailBar を選んでいるあいだしか
+///                       更新されない」のではなく、他アプリでは一切更新されない
+///   アクセシビリティ … CGEvent タップ。実際に打っているキーのハイライト（レイヤーの
+///                       入り口キー以外）を他アプリでも拾うためだけに使う。無くても
+///                       レイヤー表示そのものは入力監視だけで動く
 ///
-/// どちらも無いとローカルの NSEvent モニタしか動かず、
-/// 「BobTailBar を選んでいるときだけ切り替わる」という症状になる。
 /// ad-hoc 署名のまま再ビルドすると署名が変わり、macOS が両方とも失効させる。
 enum Permissions {
     static var accessibility: Bool { AXIsProcessTrusted() }
@@ -185,8 +190,6 @@ enum Permissions {
     static var inputMonitoring: Bool {
         IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
     }
-
-    static var globalTrackingReady: Bool { accessibility || inputMonitoring }
 
     @discardableResult
     static func requestAccessibility() -> Bool {
@@ -204,15 +207,15 @@ enum Permissions {
     static func openAccessibilitySettings() { openPane("Privacy_Accessibility") }
     static func openInputMonitoringSettings() { openPane("Privacy_ListenEvent") }
 
-    /// 足りない許可の設定パネルを開く。両方足りなければアクセシビリティから。
+    /// 足りない許可の設定パネルを開く。両方足りなければ、より重要な入力監視から。
     /// メニューの赤い行と、HUD の警告文の両方から呼ぶための共通経路。
     static func openWhicheverIsMissing() {
-        if !accessibility {
-            requestAccessibility()
-            openAccessibilitySettings()
-        } else if !inputMonitoring {
+        if !inputMonitoring {
             requestInputMonitoring()
             openInputMonitoringSettings()
+        } else if !accessibility {
+            requestAccessibility()
+            openAccessibilitySettings()
         }
     }
 
@@ -534,19 +537,19 @@ final class EventTapMonitor {
 
     private func publishStatus() {
         let tapLive = tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
-        let global = tapLive || hidOpen
-        KeyboardState.shared.setGlobalTracking(global)
+        // レイヤー通知は全部 CGEvent を発生させない usage で送っているので、
+        // レイヤー表示が他アプリでも追従するかどうかは入力監視（IOHID）だけで決まる。
+        // アクセシビリティは「実際に打っているキー」のハイライトにしか効かない
+        KeyboardState.shared.setGlobalTracking(hidOpen)
 
         let text: String
-        if tapLive && hidOpen {
+        if hidOpen && tapLive {
             text = "キー監視: オン"
-        } else if global {
-            // 片方だけでも他アプリ使用中に追従はする。ただしタップが無いと
-            // 通知キー（F13 など）を飲み込めず、前面のアプリへ漏れる
-            text = tapLive
-                ? "キー監視: オン（入力監視は未許可）"
-                : "キー監視: オン（アクセシビリティ未許可。F13 等が他アプリに漏れます）"
-        } else if Permissions.accessibility {
+        } else if hidOpen {
+            text = "キー監視: オン（押しているキーの強調表示は他アプリでは効きません）"
+        } else if tapLive {
+            text = "キー監視: 不十分（入力監視が無く、他アプリではレイヤー表示が追従しません）"
+        } else if Permissions.inputMonitoring {
             text = "キー監視: 再接続中…"
         } else {
             text = "キー監視: このアプリ以外では追従しません（許可が必要）"
@@ -859,13 +862,14 @@ final class StatusController: NSObject {
     }
 
     /// 許可が揃っていれば出さない。足りないときだけ具体的な行き先を出す。
+    /// 両方欠けているときは、レイヤー表示そのものを止めている入力監視を先に出す。
     private func renderPermissionItem() {
-        if !Permissions.accessibility {
-            permissionItem.title = "アクセシビリティを許可する…"
+        if !Permissions.inputMonitoring {
+            permissionItem.title = "入力監視を許可する…"
             permissionItem.isHidden = false
             permissionItem.isEnabled = true
-        } else if !Permissions.inputMonitoring {
-            permissionItem.title = "入力監視を許可する…"
+        } else if !Permissions.accessibility {
+            permissionItem.title = "アクセシビリティを許可する…"
             permissionItem.isHidden = false
             permissionItem.isEnabled = true
         } else {
