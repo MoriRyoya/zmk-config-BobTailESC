@@ -126,9 +126,9 @@ enum KeyHighlight {
     ]
 
     private static let fn: [Int64: [Int]] = [
-        98: [1], 100: [2], 101: [3], 111: [4],
+        122: [1], 120: [2], 99: [3], 109: [4],
         118: [11], 96: [12], 97: [13], 103: [14],
-        122: [23], 120: [24], 99: [25], 109: [26],
+        98: [23], 100: [24], 101: [25], 111: [26],
         71: [21],
     ]
 
@@ -684,18 +684,45 @@ final class StatusController: NSObject {
         let state = KeyboardState.shared
         let prefs = Preferences.shared
 
-        item.button?.title = prefs.composeMenubar(state: state)
-        item.button?.font = NSFont.monospacedDigitSystemFont(ofSize: prefs.menubarFontSize, weight: .semibold)
+        item.button?.attributedTitle = menubarTitle(state: state, prefs: prefs)
 
         layerItem.title = "レイヤー: \(state.layerName)"
         modeItem.title = "モード: \(state.effectiveOS)"
-        leftItem.title  = "左 (L): " + (state.leftBattery.map { "\($0)%" } ?? "—")
-        rightItem.title = "右 (R): " + (state.rightBattery.map { "\($0)%" } ?? "—")
+        leftItem.attributedTitle = batteryRow(label: "左 (L)", value: state.leftBattery)
+        rightItem.attributedTitle = batteryRow(label: "右 (R)", value: state.rightBattery)
         statusItemRow.title = state.bluetoothStatus
         monitorItem.title = state.monitorStatus
         gestureItem.state = prefs.gestureEnabled ? .on : .off
         keymapItem.state = prefs.keymapOverlayEnabled ? .on : .off
         AppWindows.shared.syncKeymap()
+    }
+
+    /// レイヤーを保持している間だけ色を付ける。メニューを開かなくても、
+    /// いま別の層に居ることが視界の端で分かる。
+    private func menubarTitle(state: KeyboardState, prefs: Preferences) -> NSAttributedString {
+        let text = prefs.composeMenubar(state: state)
+        let font = NSFont.monospacedDigitSystemFont(ofSize: prefs.menubarFontSize, weight: .semibold)
+        let holding = state.layerId != "base"
+        let color: NSColor = holding ? .controlAccentColor : .labelColor
+        return NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
+    }
+
+    /// 残量が少ないときだけ赤くする。ふだんは静かにしておく。
+    private func batteryRow(label: String, value: Int?) -> NSAttributedString {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        guard let value else {
+            return NSAttributedString(
+                string: "\(label): —",
+                attributes: [.font: font, .foregroundColor: NSColor.secondaryLabelColor]
+            )
+        }
+        let filled = max(0, min(5, Int((Double(value) / 100 * 5).rounded())))
+        let bar = String(repeating: "●", count: filled) + String(repeating: "○", count: 5 - filled)
+        let color: NSColor = value <= 15 ? .systemRed : (value <= 30 ? .systemOrange : .labelColor)
+        return NSAttributedString(
+            string: "\(label): \(bar)  \(value)%",
+            attributes: [.font: font, .foregroundColor: color]
+        )
     }
 }
 
@@ -771,8 +798,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         KeymapSource.shared.start()
         AppWindows.shared.prepareKeymapOverlay()
-        // LSUIElement のままだと WKWebView が眠ることがあるので、設定を開くのと同じく一度前面へ出す
-        NSApp.activate(ignoringOtherApps: true)
 
         _ = AXIsProcessTrustedWithOptions(
             [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary

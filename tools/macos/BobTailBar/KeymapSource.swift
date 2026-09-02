@@ -100,18 +100,37 @@ final class KeymapSource {
         case "github":
             fetchGitHub()
         case "bundled":
-            apply(payload: nil, status: "内蔵キーマップ")
+            applyBundled(status: "アプリ内蔵のキーマップ")
         default:
             if let folder = folderURL, let parsed = Self.parse(text: nil, folder: folder) {
                 apply(payload: parsed, status: parsed.source)
             } else if kind == "folder" {
-                apply(payload: nil, status: "フォルダのキーマップを読めません")
+                applyBundled(status: "フォルダのキーマップを読めません（内蔵を表示中）")
             } else if let inferred = Self.inferredFolder(), let parsed = Self.parse(text: nil, folder: inferred) {
                 apply(payload: parsed, status: parsed.source)
             } else {
-                apply(payload: nil, status: "内蔵キーマップ")
+                applyBundled(status: "アプリ内蔵のキーマップ")
             }
         }
+    }
+
+    /// アプリバンドルに同梱した .keymap を読む。
+    /// 読み込み先が見つからないときでも、表示が実機とずれないようにするための最後の砦。
+    /// 内蔵の配列表を別に持つと、キーマップを直したときに片方だけ古くなる。
+    private func applyBundled(status: String) {
+        apply(payload: Self.bundledPayload(), status: status)
+    }
+
+    private static var cachedBundled: OverlayPayload??
+    private static func bundledPayload() -> OverlayPayload? {
+        if let cachedBundled { return cachedBundled }
+        var parsed: OverlayPayload?
+        if let url = Bundle.main.url(forResource: "BobTail", withExtension: "keymap"),
+           let text = try? String(contentsOf: url, encoding: .utf8) {
+            parsed = parse(text: text, folder: nil, source: "アプリ内蔵")
+        }
+        cachedBundled = .some(parsed)
+        return parsed
     }
 
     func jsonString() -> String? {
@@ -515,9 +534,9 @@ final class KeymapSource {
     }
 
     private static func merge(_ base: [OverlayKey], _ overlay: [OverlayKey]) -> [OverlayKey] {
-        zip(base, overlay).map { left, right in
-            right.trans || right.none && right.tap.isEmpty && right.hold.isEmpty ? left : right
-        }
+        // &trans だけが下の層へ抜ける。&none は「そのキーは無効」という指定なので、
+        // 上書きしたまま表示する（Windows 側で意図的に潰しているキーがある）。
+        zip(base, overlay).map { left, right in right.trans ? left : right }
     }
 
     private static func preprocess(_ source: String) -> String {
@@ -841,5 +860,38 @@ final class KeymapSource {
             "LA(TAB)": "Alt+Tab",
         ]
         return table[code] ?? code
+    }
+}
+
+
+// MARK: - 表示するレイヤーを選ぶ
+
+/// KeyboardState の layerId（base / num / fn / sym / gesture / scroll）から
+/// 実際に描く 43 キーを取り出す。
+enum KeymapLayers {
+    /// スクロール中はマウス層の配列を出す。専用のレイヤー定義は無い。
+    private static func payloadId(for layerId: String) -> String {
+        layerId == "scroll" ? "mouse" : layerId
+    }
+
+    static func layer(id: String) -> OverlayLayer? {
+        let wanted = payloadId(for: id)
+        guard let layers = KeymapSource.shared.payload?.layers else { return nil }
+        return layers.first { $0.id == wanted } ?? layers.first { $0.id == "base" }
+    }
+
+    static func keys(layerId: String, os: String) -> [OverlayKey] {
+        guard let found = layer(id: layerId) else {
+            return Array(repeating: OverlayKey.noneKey, count: KeymapGeometry.keyCount)
+        }
+        let keys = os == "Windows" ? found.win : found.mac
+        if keys.count == KeymapGeometry.keyCount { return keys }
+        var padded = keys
+        while padded.count < KeymapGeometry.keyCount { padded.append(.noneKey) }
+        return Array(padded.prefix(KeymapGeometry.keyCount))
+    }
+
+    static func title(layerId: String) -> String {
+        layer(id: layerId)?.name ?? "Base"
     }
 }

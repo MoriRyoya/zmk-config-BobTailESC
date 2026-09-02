@@ -17,6 +17,10 @@ mkdir -p "${MACOS_DIR}"
 echo "==> compiling"
 RESOURCES="${APP_DIR}/Contents/Resources"
 mkdir -p "${RESOURCES}"
+# 配列表示はこの .keymap を読んで描く。読み込み先が設定されていないときの
+# 内蔵ぶんもこれ。表を別に持たないので、キーマップを直せば表示も必ず追随する。
+cp "../../../config/BobTail.keymap" "${RESOURCES}/BobTail.keymap"
+# ブラウザで見る用の説明書きも同梱しておく（アプリからは使わない）
 cp "../../../docs/keymap.html" "${RESOURCES}/keymap.html"
 
 # アプリアイコン
@@ -33,12 +37,11 @@ swiftc -O \
     -framework AppKit \
     -framework CoreBluetooth \
     -framework CoreGraphics \
-    -framework WebKit \
     -framework ServiceManagement \
     -framework IOKit \
     -framework CoreServices \
     -o "${MACOS_DIR}/${APP_NAME}" \
-    main.swift Preferences.swift Windows.swift Gesture.swift KeymapSource.swift
+    main.swift Preferences.swift KeymapView.swift Windows.swift Gesture.swift KeymapSource.swift
 
 cat > "${APP_DIR}/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

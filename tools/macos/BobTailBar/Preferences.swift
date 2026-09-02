@@ -19,6 +19,9 @@ final class Preferences {
         ("gesture", "ジェスチャ", "GES または off"),
     ]
 
+    /// 重ね表示の基準サイズ。13 列 4 行の配列 + 上の帯がちょうど収まる比率。
+    static let overlayBaseSize = NSSize(width: 820, height: 300)
+
     private let defaults = UserDefaults.standard
 
     var tokens: [MenuBarToken] {
@@ -124,24 +127,25 @@ final class Preferences {
         get {
             let width = defaults.double(forKey: "keymapOverlayWidth")
             let height = defaults.double(forKey: "keymapOverlayHeight")
-            if width >= 420, height >= 250 {
+            if width >= 420, height >= 180 {
                 return NSSize(width: width, height: height)
             }
             let scale = CGFloat(keymapOverlayScale)
             return NSSize(
-                width: (820 * scale).rounded(),
-                height: (488 * scale).rounded()
+                width: (Self.overlayBaseSize.width * scale).rounded(),
+                height: (Self.overlayBaseSize.height * scale).rounded()
             )
         }
         set {
             let width = min(1400, max(420, newValue.width.rounded()))
-            let height = min(900, max(250, newValue.height.rounded()))
+            let height = min(900, max(180, newValue.height.rounded()))
             let same =
                 defaults.object(forKey: "keymapOverlayWidth") as? Double == Double(width) &&
                 defaults.object(forKey: "keymapOverlayHeight") as? Double == Double(height)
             defaults.set(Double(width), forKey: "keymapOverlayWidth")
             defaults.set(Double(height), forKey: "keymapOverlayHeight")
-            defaults.set(min(1.7, max(0.55, Double(width / 820))), forKey: "keymapOverlayScale")
+            defaults.set(min(1.7, max(0.55, Double(width / Self.overlayBaseSize.width))),
+                         forKey: "keymapOverlayScale")
             if !same { ping() }
         }
     }
