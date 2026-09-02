@@ -14,6 +14,7 @@
 import AppKit
 import CoreBluetooth
 import CoreGraphics
+import IOKit
 import IOKit.hid
 
 // MARK: - キーボードから送られてくる通知キー (macOS の仮想キーコード)
@@ -141,6 +142,48 @@ enum KeyHighlight {
     ]
 }
 
+// MARK: - 権限
+
+/// レイヤー表示が他アプリ使用中も追従するには、2 つの許可が要る。
+///
+///   アクセシビリティ … CGEvent タップ。通知キーを他アプリに漏らさず飲み込む
+///   入力監視         … IOHID。キーボードから直接読む
+///
+/// どちらも無いとローカルの NSEvent モニタしか動かず、
+/// 「BobTailBar を選んでいるときだけ切り替わる」という症状になる。
+/// ad-hoc 署名のまま再ビルドすると署名が変わり、macOS が両方とも失効させる。
+enum Permissions {
+    static var accessibility: Bool { AXIsProcessTrusted() }
+
+    static var inputMonitoring: Bool {
+        IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+    }
+
+    static var globalTrackingReady: Bool { accessibility || inputMonitoring }
+
+    @discardableResult
+    static func requestAccessibility() -> Bool {
+        AXIsProcessTrustedWithOptions(
+            [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        )
+    }
+
+    @discardableResult
+    static func requestInputMonitoring() -> Bool {
+        // 未決定のときだけダイアログが出る。拒否済みなら false が返るだけ
+        IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+    }
+
+    static func openAccessibilitySettings() { openPane("Privacy_Accessibility") }
+    static func openInputMonitoringSettings() { openPane("Privacy_ListenEvent") }
+
+    private static func openPane(_ anchor: String) {
+        guard let url = URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?\(anchor)") else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
+
 // MARK: - 状態
 
 final class KeyboardState {
@@ -155,6 +198,8 @@ final class KeyboardState {
     var rightBattery: Int?
     var bluetoothStatus = "接続を確認中…"
     var monitorStatus = "キー監視を開始しています…"
+    /// 他アプリを使っている最中もレイヤーを拾えているか
+    private(set) var globalTracking = false
     var gestureEnabled: Bool {
         get { Preferences.shared.gestureEnabled }
         set { Preferences.shared.gestureEnabled = newValue }
@@ -273,6 +318,14 @@ final class KeyboardState {
         }
     }
 
+    func setGlobalTracking(_ value: Bool) {
+        applyOnMain {
+            guard self.globalTracking != value else { return }
+            self.globalTracking = value
+            self.notifyChange()
+        }
+    }
+
     private func applyOnMain(_ body: @escaping () -> Void) {
         if Thread.isMainThread {
             body()
@@ -287,15 +340,22 @@ final class KeyboardState {
 final class EventTapMonitor {
     private var tap: CFMachPort?
     private var hid: IOHIDManager?
+    private var hidOpen = false
     private var retryTimer: Timer?
     private let gestures = GestureEngine()
 
     func start() {
+        // どちらも「未決定」のときだけダイアログが出る。拒否済みなら黙って false
+        Permissions.requestAccessibility()
+        Permissions.requestInputMonitoring()
+
         startHID()
         startGlobalMonitor()
         tryStartTap()
         retryTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             self?.tryStartTap()
+            self?.openHIDIfNeeded()
+            self?.publishStatus()
         }
         publishStatus()
     }
@@ -370,8 +430,19 @@ final class EventTapMonitor {
             Unmanaged<EventTapMonitor>.fromOpaque(context).takeUnretainedValue().handleHID(value)
         }, ctx)
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-        IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         hid = manager
+        openHIDIfNeeded()
+    }
+
+    /// 入力監視の許可が下りるまで開けない。あとから許可されることもあるので、
+    /// 一度失敗しても諦めずに開き直す。
+    @discardableResult
+    private func openHIDIfNeeded() -> Bool {
+        if hidOpen { return true }
+        guard let hid else { return false }
+        guard Permissions.inputMonitoring else { return false }
+        hidOpen = IOHIDManagerOpen(hid, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess
+        return hidOpen
     }
 
     private func handleHID(_ value: IOHIDValue) {
@@ -408,14 +479,25 @@ final class EventTapMonitor {
     }
 
     private func publishStatus() {
-        let trusted = AXIsProcessTrusted()
-        if let tap, CGEvent.tapIsEnabled(tap: tap) {
-            KeyboardState.shared.setMonitorStatus("キー監視: オン")
-        } else if trusted {
-            KeyboardState.shared.setMonitorStatus("キー監視: 再接続中…")
+        let tapLive = tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
+        let global = tapLive || hidOpen
+        KeyboardState.shared.setGlobalTracking(global)
+
+        let text: String
+        if tapLive && hidOpen {
+            text = "キー監視: オン"
+        } else if global {
+            // 片方だけでも他アプリ使用中に追従はする。ただしタップが無いと
+            // 通知キー（F13 など）を飲み込めず、前面のアプリへ漏れる
+            text = tapLive
+                ? "キー監視: オン（入力監視は未許可）"
+                : "キー監視: オン（アクセシビリティ未許可。F13 等が他アプリに漏れます）"
+        } else if Permissions.accessibility {
+            text = "キー監視: 再接続中…"
         } else {
-            KeyboardState.shared.setMonitorStatus("キー監視: オフ（アクセシビリティを許可）")
+            text = "キー監視: このアプリ以外では追従しません（許可が必要）"
         }
+        KeyboardState.shared.setMonitorStatus(text)
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -615,6 +697,7 @@ final class StatusController: NSObject {
     private let rightItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let statusItemRow = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let monitorItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let permissionItem = NSMenuItem(title: "", action: #selector(fixPermissions), keyEquivalent: "")
     private let gestureItem = NSMenuItem(title: "トラックボールジェスチャ", action: #selector(toggleGesture), keyEquivalent: "")
     private let keymapItem = NSMenuItem(title: "レイヤーでキーマップを表示", action: #selector(toggleKeymapOverlay), keyEquivalent: "k")
 
@@ -637,6 +720,9 @@ final class StatusController: NSObject {
         menu.addItem(rightItem)
         menu.addItem(statusItemRow)
         menu.addItem(monitorItem)
+
+        permissionItem.target = self
+        menu.addItem(permissionItem)
         menu.addItem(.separator())
 
         gestureItem.target = self
@@ -661,6 +747,17 @@ final class StatusController: NSObject {
     }
 
     var batteryMonitor: BatteryMonitor?
+
+    /// 足りない許可の設定パネルを開く。両方足りなければアクセシビリティから。
+    @objc private func fixPermissions() {
+        if !Permissions.accessibility {
+            Permissions.requestAccessibility()
+            Permissions.openAccessibilitySettings()
+        } else if !Permissions.inputMonitoring {
+            Permissions.requestInputMonitoring()
+            Permissions.openInputMonitoringSettings()
+        }
+    }
 
     @objc private func toggleGesture() {
         KeyboardState.shared.gestureEnabled.toggle()
@@ -691,10 +788,35 @@ final class StatusController: NSObject {
         leftItem.attributedTitle = batteryRow(label: "左 (L)", value: state.leftBattery)
         rightItem.attributedTitle = batteryRow(label: "右 (R)", value: state.rightBattery)
         statusItemRow.title = state.bluetoothStatus
-        monitorItem.title = state.monitorStatus
+        monitorItem.attributedTitle = monitorRow(state: state)
+        renderPermissionItem()
         gestureItem.state = prefs.gestureEnabled ? .on : .off
         keymapItem.state = prefs.keymapOverlayEnabled ? .on : .off
         AppWindows.shared.syncKeymap()
+    }
+
+    /// 追従できていないときは赤で出す。ここが黙って劣化するのが一番困る。
+    private func monitorRow(state: KeyboardState) -> NSAttributedString {
+        let color: NSColor = state.globalTracking ? .labelColor : .systemRed
+        return NSAttributedString(
+            string: state.monitorStatus,
+            attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: color]
+        )
+    }
+
+    /// 許可が揃っていれば出さない。足りないときだけ具体的な行き先を出す。
+    private func renderPermissionItem() {
+        if !Permissions.accessibility {
+            permissionItem.title = "アクセシビリティを許可する…"
+            permissionItem.isHidden = false
+            permissionItem.isEnabled = true
+        } else if !Permissions.inputMonitoring {
+            permissionItem.title = "入力監視を許可する…"
+            permissionItem.isHidden = false
+            permissionItem.isEnabled = true
+        } else {
+            permissionItem.isHidden = true
+        }
     }
 
     /// レイヤーを保持している間だけ色を付ける。メニューを開かなくても、

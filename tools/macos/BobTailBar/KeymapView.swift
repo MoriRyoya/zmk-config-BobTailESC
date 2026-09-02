@@ -18,6 +18,10 @@ import AppKit
 
 /// config/boards/shields/Test/BobTail.dtsi の key_physical_attrs と同じ並び。
 /// 列は 100 単位（0…1200）、行は 0…3。15 番はエンコーダでキーは載っていない。
+///
+/// dtsi は全キーを同じ高さに置いているが、実物はカラムスタッガードで、
+/// 列ごとに縦位置がずれている。指の長さに合わせて中指の列がいちばん奥、
+/// 小指と内側の列が手前に来る。表示もそれに合わせる。
 enum KeymapGeometry {
     struct Slot {
         let column: CGFloat
@@ -31,6 +35,36 @@ enum KeymapGeometry {
     /// ボールは最下段右、41 と 42 のあいだ
     static let ballColumn: CGFloat = 10
     static let ballRow: CGFloat = 3
+
+    /// 列ごとの下方向のずれ（キー 1 個分を 1.0 とする）。
+    /// 実機の写真から起こした値なので、手元と違って見えるならここだけ直せばよい。
+    ///
+    ///   左 0:小指  1:薬指  2:中指  3:人差し指  4:人差し指(内)  5:最内(エンコーダ列)
+    ///   右 7:最内  8:人差し指(内)  9:人差し指  10:中指  11:薬指  12:小指
+    static let columnStagger: [CGFloat] = [
+        0.55,  // 0  小指
+        0.16,  // 1  薬指
+        0.00,  // 2  中指（いちばん奥）
+        0.20,  // 3  人差し指
+        0.34,  // 4  人差し指の内側
+        0.48,  // 5  最内（エンコーダ / - / Space）
+        0.00,  // 6  キーなし（左右のすき間）
+        0.48,  // 7  最内（? / ⌫ / Enter）
+        0.34,  // 8  人差し指の内側
+        0.20,  // 9  人差し指
+        0.00,  // 10 中指（いちばん奥）
+        0.16,  // 11 薬指
+        0.55,  // 12 小指
+    ]
+
+    static func stagger(column: CGFloat) -> CGFloat {
+        let index = Int(column)
+        guard columnStagger.indices.contains(index) else { return 0 }
+        return columnStagger[index]
+    }
+
+    /// スタッガーのぶんだけ縦に伸びる。描画領域の高さはこれで割る。
+    static let staggeredRows: CGFloat = rows + (columnStagger.max() ?? 0)
 
     static let slots: [Slot] = {
         var out: [Slot] = []
@@ -173,7 +207,7 @@ final class KeymapBoardView: NSView {
     override var isOpaque: Bool { false }
 
     /// 配列の縦横比。パネルのサイズ決めに使う。
-    static let aspectRatio: CGFloat = KeymapGeometry.columns / KeymapGeometry.rows
+    static let aspectRatio: CGFloat = KeymapGeometry.columns / KeymapGeometry.staggeredRows
 
     override func draw(_ dirtyRect: NSRect) {
         let palette = KeymapPalette.resolve(for: self)
@@ -181,10 +215,11 @@ final class KeymapBoardView: NSView {
         let area = bounds.insetBy(dx: inset, dy: inset)
         guard area.width > 8, area.height > 8 else { return }
 
-        // 13 列 4 行がちょうど収まる 1 キーの大きさ
-        let unit = min(area.width / KeymapGeometry.columns, area.height / KeymapGeometry.rows)
+        // 13 列 4 行 + スタッガーのぶんがちょうど収まる 1 キーの大きさ
+        let unit = min(area.width / KeymapGeometry.columns,
+                       area.height / KeymapGeometry.staggeredRows)
         let boardWidth = unit * KeymapGeometry.columns
-        let boardHeight = unit * KeymapGeometry.rows
+        let boardHeight = unit * KeymapGeometry.staggeredRows
         let originX = area.minX + (area.width - boardWidth) / 2
         let originY = area.minY + (area.height - boardHeight) / 2
 
@@ -192,9 +227,10 @@ final class KeymapBoardView: NSView {
         let radius = max(2, unit * 0.16)
 
         func capFrame(column: CGFloat, row: CGFloat) -> NSRect {
-            NSRect(
+            let drop = KeymapGeometry.stagger(column: column)
+            return NSRect(
                 x: originX + column * unit + gap / 2,
-                y: originY + row * unit + gap / 2,
+                y: originY + (row + drop) * unit + gap / 2,
                 width: unit - gap,
                 height: unit - gap
             )
@@ -336,6 +372,7 @@ final class KeymapHUDView: NSView {
     private var osTitle = ""
     private var batteryText = ""
     private var sourceText = ""
+    private var warningText = ""
 
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
@@ -354,15 +391,17 @@ final class KeymapHUDView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func update(layerTitle: String, badge: String, os: String, left: Int?, right: Int?, source: String) {
+    func update(layerTitle: String, badge: String, os: String, left: Int?, right: Int?,
+                source: String, warning: String = "") {
         let battery = "L " + (left.map { "\($0)%" } ?? "—") + "   R " + (right.map { "\($0)%" } ?? "—")
         guard layerTitle != self.layerTitle || badge != layerBadge || os != osTitle
-            || battery != batteryText || source != sourceText else { return }
+            || battery != batteryText || source != sourceText || warning != warningText else { return }
         self.layerTitle = layerTitle
         self.layerBadge = badge
         self.osTitle = os
         self.batteryText = battery
         self.sourceText = source
+        self.warningText = warning
         needsDisplay = true
     }
 
@@ -454,9 +493,15 @@ final class KeymapHUDView: NSView {
                                width: 180, height: Self.headerHeight)
         drawLeft(layerTitle, in: titleRect, size: 12, weight: .semibold, color: palette.plateText)
 
-        let rightText = osTitle + "   " + batteryText
-        drawRight(rightText, in: NSRect(x: header.width - 250, y: 0, width: 238, height: Self.headerHeight),
-                  size: 11, weight: .medium, color: palette.plateFaint)
+        // 追従できていないなら、電池残量よりそちらを先に知らせる
+        let rightText = warningText.isEmpty ? osTitle + "   " + batteryText : warningText
+        let rightColor = warningText.isEmpty
+            ? palette.plateFaint
+            : NSColor.systemRed.blended(withFraction: 0.15, of: palette.plateText) ?? .systemRed
+        drawRight(rightText, in: NSRect(x: badgeRect.maxX + 200, y: 0,
+                                        width: max(60, header.width - badgeRect.maxX - 212),
+                                        height: Self.headerHeight),
+                  size: 11, weight: .medium, color: rightColor)
 
         // 帯と配列のあいだの細い区切り
         let line = NSBezierPath(rect: NSRect(x: 10, y: Self.headerHeight - 1,

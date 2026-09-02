@@ -64,10 +64,26 @@ cat > "${APP_DIR}/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# 未署名のままだとアクセシビリティ許可が再ビルドのたびに外れるため、
-# ローカルの ad-hoc 署名を付けておく
-echo "==> signing (ad-hoc)"
-codesign --force --deep --sign - "${APP_DIR}"
+# 署名が変わると macOS はアクセシビリティと入力監視の許可を捨てる。
+# ad-hoc (-) は毎回別の署名になるので、ビルドのたびに許可し直しになり、
+# 「BobTailBar を選んでいるときしかレイヤーが切り替わらない」状態に戻る。
+# 安定した識別名があるならそちらを使う。
+IDENTITY="$(./ensure-signing-identity.sh || echo -)"
+echo "==> signing (${IDENTITY})"
+codesign --force --deep --sign "${IDENTITY}" "${APP_DIR}"
+
+if [[ "${IDENTITY}" == "-" ]]; then
+    cat >&2 <<'WARN'
+==> 注意: ad-hoc 署名です。ビルドのたびに署名が変わるため、
+    「アクセシビリティ」と「入力監視」の許可が毎回外れます。
+    外れている間はレイヤー表示が他アプリで追従しません
+    （メニューの「キー監視」が赤くなります）。
+
+    毎回やり直したくない場合は、キーチェーンアクセスで
+    「BobTailBar Local」という名前のコード署名用の自己署名証明書を作ってください。
+    ensure-signing-identity.sh がそれを自動で拾います。
+WARN
+fi
 
 echo "==> built: ${APP_DIR}"
 
@@ -78,5 +94,8 @@ if [[ "${1:-}" == "install" ]]; then
     rm -rf "/Applications/${APP_NAME}.app"
     cp -R "${APP_DIR}" /Applications/
     open "/Applications/${APP_NAME}.app"
-    echo "==> 「システム設定 → プライバシーとセキュリティ → アクセシビリティ」で BobTailBar を許可してください"
+    echo "==> 「システム設定 → プライバシーとセキュリティ」で次の 2 つを許可してください"
+    echo "      ・アクセシビリティ … 通知キーを他アプリに漏らさず受け取る"
+    echo "      ・入力監視         … キーボードから直接読む"
+    echo "    どちらも無いと、BobTailBar を選んでいるときしかレイヤーが切り替わりません" 
 fi

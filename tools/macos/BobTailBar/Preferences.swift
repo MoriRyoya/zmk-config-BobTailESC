@@ -19,8 +19,9 @@ final class Preferences {
         ("gesture", "ジェスチャ", "GES または off"),
     ]
 
-    /// 重ね表示の基準サイズ。13 列 4 行の配列 + 上の帯がちょうど収まる比率。
-    static let overlayBaseSize = NSSize(width: 820, height: 300)
+    /// 重ね表示の基準サイズ。13 列 4 行 + カラムスタッガーのぶんと、
+    /// 上の帯がちょうど収まる比率。
+    static let overlayBaseSize = NSSize(width: 820, height: 320)
 
     private let defaults = UserDefaults.standard
 

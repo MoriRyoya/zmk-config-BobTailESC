@@ -138,7 +138,8 @@ final class KeymapOverlayController: NSWindowController {
             os: state.effectiveOS,
             left: state.leftBattery,
             right: state.rightBattery,
-            source: KeymapSource.shared.statusText
+            source: KeymapSource.shared.statusText,
+            warning: state.globalTracking ? "" : "⚠︎ 他アプリでは追従しません — メニューから許可してください"
         )
         pushPressed()
     }
@@ -305,6 +306,11 @@ final class KeymapOverlayController: NSWindowController {
     }
 }
 
+/// スクロールの中身は上から積みたいので反転させる
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
+}
+
 final class SettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private let tabs = NSTabView()
     private let table = NSTableView()
@@ -351,6 +357,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             defer: false
         )
         window.title = "BobTailBar 設定"
+        window.minSize = NSSize(width: 560, height: 420)
         window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         window.setFrameAutosaveName("BobTailSettings4")
         super.init(window: window)
@@ -521,8 +528,9 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         keymapPreview.layer?.cornerRadius = 10
         keymapPreview.layer?.masksToBounds = true
         NSLayoutConstraint.activate([
-            keymapPreview.widthAnchor.constraint(equalToConstant: 560),
-            keymapPreview.heightAnchor.constraint(equalToConstant: 172),
+            keymapPreview.heightAnchor.constraint(
+                equalTo: keymapPreview.widthAnchor,
+                multiplier: 1 / KeymapBoardView.aspectRatio),
         ])
 
         sourcePopup.removeAllItems()
@@ -548,7 +556,9 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             folderHint,
         ], in: .leading)
         folderBox.orientation = NSUserInterfaceLayoutOrientation.vertical
+        folderBox.alignment = NSLayoutConstraint.Attribute.leading
         folderBox.spacing = 8
+        stretch([keymapFolderLabel, folderHint], to: folderBox)
 
         githubRepoField.placeholderString = "MoriRyoya/zmk-config-BobTailESC または GitHub URL"
         githubBranchField.placeholderString = "feature/researcher-keymap"
@@ -563,24 +573,29 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             field.bezelStyle = .roundedBezel
             field.focusRingType = .default
             field.menu = AppMenu.textEditMenu()
+            field.lineBreakMode = .byTruncatingTail
+            // 幅は行に合わせて伸ばす。固定幅だとウィンドウを狭めたときに
+            // はみ出して、右へずれたように見える
+            field.translatesAutoresizingMaskIntoConstraints = false
+            field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            field.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
         }
         let fetch = NSButton(title: "GitHub から読み込む", target: self, action: #selector(applyGitHubSource))
         let githubHint = NSTextField(wrappingLabelWithString: "公開リポジトリはトークン不要です。非公開は GitHub の Fine-grained token（Contents: Read）を入れて API で読みます。ブランチの初期値は feature/researcher-keymap です。約 20 秒ごとに取り込みます。")
         githubHint.textColor = .secondaryLabelColor
-        githubBox.setViews([
+        let githubRows: [NSView] = [
             labeled("リポジトリ", githubRepoField),
             labeled("ブランチ", githubBranchField),
             labeled("ファイル", githubPathField),
             labeled("トークン", githubTokenField),
-            fetch,
-            githubHint,
-        ], in: .leading)
+        ]
+        githubBox.setViews(githubRows + [fetch, githubHint], in: .leading)
         githubBox.orientation = NSUserInterfaceLayoutOrientation.vertical
+        githubBox.alignment = NSLayoutConstraint.Attribute.leading
         githubBox.spacing = 8
-        githubRepoField.widthAnchor.constraint(equalToConstant: 380).isActive = true
-        githubBranchField.widthAnchor.constraint(equalToConstant: 280).isActive = true
-        githubPathField.widthAnchor.constraint(equalToConstant: 280).isActive = true
-        githubTokenField.widthAnchor.constraint(equalToConstant: 280).isActive = true
+        stretch(githubRows, to: githubBox)
+        stretch([githubHint], to: githubBox)
 
         let stack = NSStackView(views: [
             hint,
@@ -604,11 +619,11 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         stack.orientation = NSUserInterfaceLayoutOrientation.vertical
         stack.alignment = NSLayoutConstraint.Attribute.leading
         stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
-        stack.autoresizingMask = [.width, .height]
         opacity.widthAnchor.constraint(equalToConstant: 220).isActive = true
         overlayScale.widthAnchor.constraint(equalToConstant: 220).isActive = true
-        return stack
+        stretch([hint, keymapPreview, overlayHint, githubBox, folderBox, keymapSourceStatus],
+                to: stack)
+        return scrollable(stack)
     }
 
     private func gestureTab() -> NSView {
@@ -671,12 +686,57 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         return view
     }
 
+    /// ラベルの幅を揃える。これが無いと「リポジトリ」「ブランチ」「ファイル」
+    /// でラベル幅が違うぶんだけ入力欄の左端がバラつき、右へずれて見える。
+    private static let formLabelWidth: CGFloat = 84
+
     private func labeled(_ title: String, _ view: NSView) -> NSStackView {
         let label = NSTextField(labelWithString: title)
+        label.alignment = .right
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        label.widthAnchor.constraint(equalToConstant: Self.formLabelWidth).isActive = true
+
         let row = NSStackView(views: [label, view])
         row.orientation = NSUserInterfaceLayoutOrientation.horizontal
-        row.spacing = 12
+        row.alignment = NSLayoutConstraint.Attribute.centerY
+        row.spacing = 10
         return row
+    }
+
+    /// 縦スクロールできる台紙。ウィンドウを小さくしても中身が切れず、
+    /// 横は常にウィンドウ幅にそろう。
+    private func scrollable(_ content: NSView) -> NSView {
+        let document = FlippedView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        content.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 20),
+            content.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -20),
+            content.topAnchor.constraint(equalTo: document.topAnchor, constant: 16),
+            content.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -16),
+        ])
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        scroll.borderType = .noBorder
+        scroll.documentView = document
+        scroll.autoresizingMask = [.width, .height]
+        NSLayoutConstraint.activate([
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+        ])
+        return scroll
+    }
+
+    /// 行をタブの幅いっぱいに広げる。入力欄が伸びてラベルの位置が固定される。
+    private func stretch(_ rows: [NSView], to stack: NSStackView) {
+        for row in rows {
+            row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { tokens.count }
