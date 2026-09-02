@@ -675,6 +675,139 @@ static void scroll_unlock(struct k_timer *timer) {
 
 K_TIMER_DEFINE(scroll_unlock_timer, scroll_unlock, NULL);
 
+#ifdef CONFIG_PMW3610_SCROLL_MOMENTUM
+/* Coasting after a flick.
+ *
+ * The hand-driven path below emits at most one wheel tick per motion report.
+ * We time the gaps between those ticks; when the ball rests, that gap is the
+ * speed to start coasting at. Each coasted tick then stretches the gap until
+ * it is slow enough to stop.
+ *
+ * The coast deliberately outlives the scroll layer: the user releases the
+ * middle-click hold to end the gesture, which is exactly the moment macOS
+ * would keep going. Only touching the ball again cancels it.
+ */
+
+static void scroll_momentum_step(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(scroll_momentum_work, scroll_momentum_step);
+
+static void scroll_momentum_stop(struct pixart_data *data) {
+    data->scroll_momentum_active = false;
+    data->scroll_momentum_ticks = 0;
+    k_work_cancel_delayable(&scroll_momentum_work);
+}
+
+/* Forget the measured speed. Called when a flick ends, so the next one is
+ * timed from scratch rather than inheriting the previous gesture's speed. */
+static void scroll_momentum_reset_speed(struct pixart_data *data) {
+    data->scroll_last_tick_time = 0;
+    data->scroll_tick_interval_ms = 0;
+    data->scroll_burst_ticks = 0;
+}
+
+static void scroll_momentum_step(struct k_work *work) {
+    ARG_UNUSED(work);
+    const struct device *dev = ball_action_sensor_dev;
+    if (!dev) {
+        return;
+    }
+    struct pixart_data *data = dev->data;
+    if (!data->scroll_momentum_active) {
+        return;
+    }
+
+    input_report_rel(dev, data->scroll_momentum_code, data->scroll_momentum_value, true, K_FOREVER);
+    data->scroll_momentum_ticks++;
+
+    data->scroll_momentum_interval_ms = (int32_t)(((int64_t)data->scroll_momentum_interval_ms *
+                                                   CONFIG_PMW3610_SCROLL_MOMENTUM_DECAY_PERMILLE) /
+                                                  1000);
+
+    if (data->scroll_momentum_ticks >= CONFIG_PMW3610_SCROLL_MOMENTUM_MAX_TICKS ||
+        data->scroll_momentum_interval_ms > CONFIG_PMW3610_SCROLL_MOMENTUM_MAX_INTERVAL_MS) {
+        scroll_momentum_stop(data);
+        return;
+    }
+
+    k_work_schedule(&scroll_momentum_work, K_MSEC(data->scroll_momentum_interval_ms));
+}
+
+/* Fired once the ball has been still for SETTLE_MS. */
+static void scroll_momentum_start(struct k_timer *timer) {
+    ARG_UNUSED(timer);
+    const struct device *dev = ball_action_sensor_dev;
+    if (!dev) {
+        return;
+    }
+    struct pixart_data *data = dev->data;
+
+    int32_t interval = data->scroll_tick_interval_ms;
+    bool fast_enough = interval > 0 && interval <= CONFIG_PMW3610_SCROLL_MOMENTUM_MAX_INTERVAL_MS;
+    bool long_enough = data->scroll_burst_ticks >= CONFIG_PMW3610_SCROLL_MOMENTUM_MIN_TICKS;
+
+    scroll_momentum_reset_speed(data);
+
+    if (!fast_enough || !long_enough || data->scroll_momentum_code == 0) {
+        return;
+    }
+
+    if (interval < CONFIG_PMW3610_SCROLL_MOMENTUM_MIN_INTERVAL_MS) {
+        interval = CONFIG_PMW3610_SCROLL_MOMENTUM_MIN_INTERVAL_MS;
+    }
+
+    data->scroll_momentum_interval_ms = interval;
+    data->scroll_momentum_ticks = 0;
+    data->scroll_momentum_active = true;
+    k_work_schedule(&scroll_momentum_work, K_MSEC(interval));
+}
+
+K_TIMER_DEFINE(scroll_momentum_settle_timer, scroll_momentum_start, NULL);
+
+/* Record one hand-driven tick and re-arm the settle timer. */
+static void scroll_momentum_note_tick(struct pixart_data *data, uint16_t code, int8_t value) {
+    int64_t now = k_uptime_get();
+
+    if (data->scroll_momentum_code != code) {
+        /* Axis changed mid-gesture: the old timing says nothing about the new one. */
+        data->scroll_tick_interval_ms = 0;
+        data->scroll_burst_ticks = 0;
+        data->scroll_last_tick_time = 0;
+    }
+    data->scroll_momentum_code = code;
+    data->scroll_momentum_value = value;
+
+    if (data->scroll_last_tick_time != 0) {
+        int32_t gap = (int32_t)(now - data->scroll_last_tick_time);
+        if (gap > CONFIG_PMW3610_SCROLL_MOMENTUM_MAX_INTERVAL_MS) {
+            /* Slow drag: start the burst over so it cannot coast. */
+            data->scroll_tick_interval_ms = 0;
+            data->scroll_burst_ticks = 0;
+        } else if (data->scroll_tick_interval_ms == 0) {
+            data->scroll_tick_interval_ms = gap;
+        } else {
+            /* Weighted toward history so one jittery gap cannot set the speed. */
+            data->scroll_tick_interval_ms = (data->scroll_tick_interval_ms * 2 + gap) / 3;
+        }
+    }
+
+    data->scroll_last_tick_time = now;
+    if (data->scroll_burst_ticks < UINT16_MAX) {
+        data->scroll_burst_ticks++;
+    }
+
+    k_timer_start(&scroll_momentum_settle_timer,
+                  K_MSEC(CONFIG_PMW3610_SCROLL_MOMENTUM_SETTLE_MS), K_NO_WAIT);
+}
+
+/* Any deliberate touch of the ball ends the coast, the way resting a hand on a
+ * trackpad does. */
+static void scroll_momentum_interrupt(struct pixart_data *data) {
+    if (data->scroll_momentum_active) {
+        scroll_momentum_stop(data);
+    }
+}
+#endif /* CONFIG_PMW3610_SCROLL_MOMENTUM */
+
 static int pmw3610_report_data(const struct device *dev) {
     struct pixart_data *data = dev->data;
     uint8_t buf[PMW3610_BURST_SIZE];
@@ -726,14 +859,8 @@ static int pmw3610_report_data(const struct device *dev) {
     int16_t x = 0;
     int16_t y = 0;
 
-#if AUTOMOUSE_LAYER > 0
-    if (input_mode == MOVE &&
-        (automouse_triggered || zmk_keymap_highest_layer_active() != AUTOMOUSE_LAYER) &&
-        (abs(x) + abs(y) > CONFIG_PMW3610_MOVEMENT_THRESHOLD)
-    ) {
-        activate_automouse_layer();
-    }
-#endif
+    /* The automouse check lives further down, after the burst read. Testing
+     * abs(x) + abs(y) here would always compare 0 against the threshold. */
 
     int err = motion_burst_read(dev, buf, sizeof(buf));
     if (err) {
@@ -800,6 +927,9 @@ static int pmw3610_report_data(const struct device *dev) {
 #endif
 
     if (x != 0 || y != 0) {
+#ifdef CONFIG_PMW3610_SCROLL_MOMENTUM
+        scroll_momentum_interrupt(data);
+#endif
         if (input_mode == MOVE || input_mode == SNIPE) {
 #if AUTOMOUSE_LAYER > 0
             // トラックボールの動きの大きさを計算
@@ -839,18 +969,22 @@ static int pmw3610_report_data(const struct device *dev) {
 
             if (data->scroll_axis_lock == 1 &&
                 abs(data->scroll_delta_y) > CONFIG_PMW3610_SCROLL_TICK) {
-                input_report_rel(dev, INPUT_REL_WHEEL,
-                                 data->scroll_delta_y > 0 ? PMW3610_SCROLL_Y_NEGATIVE
-                                                          : PMW3610_SCROLL_Y_POSITIVE,
-                                 true, K_FOREVER);
+                const int8_t wheel = data->scroll_delta_y > 0 ? PMW3610_SCROLL_Y_NEGATIVE
+                                                             : PMW3610_SCROLL_Y_POSITIVE;
+                input_report_rel(dev, INPUT_REL_WHEEL, wheel, true, K_FOREVER);
                 data->scroll_delta_y = 0;
+#ifdef CONFIG_PMW3610_SCROLL_MOMENTUM
+                scroll_momentum_note_tick(data, INPUT_REL_WHEEL, wheel);
+#endif
             } else if (data->scroll_axis_lock == 2 &&
                        abs(data->scroll_delta_x) > CONFIG_PMW3610_SCROLL_TICK) {
-                input_report_rel(dev, INPUT_REL_HWHEEL,
-                                 data->scroll_delta_x > 0 ? PMW3610_SCROLL_X_NEGATIVE
-                                                          : PMW3610_SCROLL_X_POSITIVE,
-                                 true, K_FOREVER);
+                const int8_t hwheel = data->scroll_delta_x > 0 ? PMW3610_SCROLL_X_NEGATIVE
+                                                              : PMW3610_SCROLL_X_POSITIVE;
+                input_report_rel(dev, INPUT_REL_HWHEEL, hwheel, true, K_FOREVER);
                 data->scroll_delta_x = 0;
+#ifdef CONFIG_PMW3610_SCROLL_MOMENTUM
+                scroll_momentum_note_tick(data, INPUT_REL_HWHEEL, hwheel);
+#endif
             }
 
             k_timer_start(&scroll_unlock_timer, K_MSEC(CONFIG_PMW3610_SCROLL_LOCK_IDLE_MS),

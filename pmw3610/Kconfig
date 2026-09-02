@@ -126,6 +126,65 @@ config PMW3610_INVERT_SCROLL_Y
 	bool "Invert the Y axis of the scroll"
 	default PMW3610_INVERT_Y
 
+config PMW3610_SCROLL_MOMENTUM
+	bool "Keep scrolling briefly after the ball stops"
+	help
+	  macOS keeps a trackpad scroll coasting after the fingers lift. Without
+	  this, the wheel stops the instant the ball does, which reads as abrupt
+	  next to every other gesture on the machine.
+
+	  When the ball comes to rest after a flick, the driver keeps emitting
+	  wheel ticks on the axis that was already locked, slowing down until it
+	  stops. Touching the ball again cancels the coast, so it never fights
+	  the hand. Because the coast repeats the locked axis, it cannot produce
+	  a stray HWHEEL tick.
+
+if PMW3610_SCROLL_MOMENTUM
+
+config PMW3610_SCROLL_MOMENTUM_SETTLE_MS
+	int "Idle time that counts as the ball having stopped"
+	default 70
+	range 20 500
+	help
+	  Shorter feels more immediate but risks coasting during a slow drag.
+
+config PMW3610_SCROLL_MOMENTUM_MIN_INTERVAL_MS
+	int "Fastest coast interval in ms"
+	default 16
+	range 8 200
+	help
+	  Floor on the starting speed, so a very fast flick cannot flood the host.
+
+config PMW3610_SCROLL_MOMENTUM_MAX_INTERVAL_MS
+	int "Slowest coast interval in ms before the coast ends"
+	default 140
+	range 40 1000
+	help
+	  Also the cutoff for starting: a scroll slower than this was a deliberate
+	  slow drag, not a flick, so it does not coast at all.
+
+config PMW3610_SCROLL_MOMENTUM_DECAY_PERMILLE
+	int "Per-tick slowdown, in permille of the current interval"
+	default 1150
+	range 1010 3000
+	help
+	  1150 stretches each gap by 15%. With the default interval range that is
+	  roughly 14 coasted ticks over about 0.8 s.
+
+config PMW3610_SCROLL_MOMENTUM_MIN_TICKS
+	int "Ticks required in one flick before it may coast"
+	default 2
+	range 1 20
+	help
+	  Stops a single stray tick from launching a coast.
+
+config PMW3610_SCROLL_MOMENTUM_MAX_TICKS
+	int "Hard cap on coasted ticks"
+	default 60
+	range 1 500
+
+endif # PMW3610_SCROLL_MOMENTUM
+
 config PMW3610_AUTOMOUSE_TIMEOUT_MS
 	int "Amount of milliseconds the mouse layer will be active after using the trackball"
 	default 400

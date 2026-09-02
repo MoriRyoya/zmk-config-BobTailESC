@@ -60,6 +60,7 @@
 #define HOLD_SCRL  &ind_scrl
 #define HOLD_GEST  &ind_gest
 #define HOLD_FN    &ind_fn
+#define MO_GEST    &ind_gest
 #define MO_FN      &ind_fn
 #define TOG_NUM    &num_lock
 #define OS_MAC     &os_mac
@@ -72,6 +73,7 @@
 #define HOLD_SCRL  &mo
 #define HOLD_GEST  &mo
 #define HOLD_FN    &mo
+#define MO_GEST    &mo GEST
 #define MO_FN      &mo FN
 #define TOG_NUM    &tog NUM
 #define OS_MAC     &to BASE
@@ -340,7 +342,7 @@
 &kp Q        &kp W        &kp E               &kp R                &kp T                                                                &kp Y  &kp U         &kp I         &kp O        &kp P
 &hml LGUI A  &hml LALT S  &hml LCTRL D        &hml LSHFT F         &kp G              &none                  &lt_fn FN QMARK            &kp H  &hmr RSHFT J  &hmr RCTRL K  &hmr RALT L  &hmr RGUI SEMI
 &kp Z        &kp X        &kp C               &kp V                &kp B              &kp MINUS              &kp BSPC                   &kp N  &kp M         &kp COMMA     &kp DOT      &kp SLASH
-&kp TAB      &kp LCTRL    &kp LGUI            HOLD_GEST            &ime_mod LALT LANG2  &lt_num NUM SPACE      &lt_sym SYM ENTER          &ime_mod RALT LANG1                              MO_FN
+&kp TAB      &kp LCTRL    &kp LGUI            MO_GEST              &ime_mod LALT LANG2  &lt_num NUM SPACE      &lt_sym SYM ENTER          &ime_mod RALT LANG1                              MO_FN
             >;
 
             sensor-bindings = <&enc_scroll>;
@@ -352,7 +354,7 @@
 &trans  &trans  &trans            &trans  &trans                      &trans    &trans    &trans             &trans    &trans
 &trans  &trans  &trans            &trans  &trans  &none       &trans  &mkp MB4  &mkp MB1  &lt_scrl SCRL MB3  &mkp MB2  &mkp MB5
 &trans  &trans  &trans            &trans  &trans  &trans      &trans  &trans    &trans    &trans             &trans    &trans
-&trans  &trans  &trans HOLD_GEST  &trans  &trans  &trans      &trans  &trans
+&trans  &trans  &trans  MO_GEST  &trans  &trans  &trans      &trans  &trans
             >;
 
             sensor-bindings = <&enc_scroll>;
@@ -469,16 +471,16 @@
          *
          *  BT0  F1  F2  F3  F10 | 輝度- 輝度+ 前曲  再生  次曲
          *  BT1  F4  F5  F6  F11 | ミュート 音量- 音量+ PrtSc NumLk
-         *  BT2      F7  F8  F9  F12 | Caps  Mac   Win   出力  BT削除 ブート
+         *  BT2  F7  F8  F9  F12     | Caps  Mac   Win   出力  BT削除 ブート
          * ============================================================ */
 
         fn_layer {
             display-name = "Fn";
             bindings = <
-&bt BT_SEL 0  &kp F1  &kp F2  &kp F3  &kp F10                                              &bri_dn      &bri_up       &kp C_PREV    &kp C_PP      &kp C_NEXT
-&bt BT_SEL 1  &kp F4  &kp F5  &kp F6  &kp F11  &none                         &trans        &kp C_MUTE   &kp C_VOL_DN  &kp C_VOL_UP  &kp PSCRN     TOG_NUM  &bt BT_SEL 2
-&trans        &kp F7  &kp F8  &kp F9  &kp F12  &caps_word                    OS_MAC        OS_WIN       &out OUT_TOG  &bt BT_CLR    &bootloader   &trans   &trans   &trans
-&trans        &trans  &trans  &trans  &trans   &trans
+&bt BT_SEL 0  &kp F1  &kp F2  &kp F3  &kp F10                                        &bri_dn     &bri_up       &kp C_PREV    &kp C_PP     &kp C_NEXT
+&bt BT_SEL 1  &kp F4  &kp F5  &kp F6  &kp F11  &none              &trans      &kp C_MUTE  &kp C_VOL_DN  &kp C_VOL_UP  &kp PSCRN    TOG_NUM
+&bt BT_SEL 2  &kp F7  &kp F8  &kp F9  &kp F12  &trans             &caps_word  OS_MAC      OS_WIN        &out OUT_TOG  &bt BT_CLR   &bootloader
+&trans        &trans  &trans  &trans  &trans   &trans             &trans      &trans                                               &trans
             >;
 
             sensor-bindings = <&inc_dec_kp C_VOL_DN C_VOL_UP>;

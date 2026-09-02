@@ -26,6 +26,19 @@ struct pixart_data {
     int32_t scroll_delta_x;
     int32_t scroll_delta_y;
     int8_t scroll_axis_lock;
+#ifdef CONFIG_PMW3610_SCROLL_MOMENTUM
+    /* Coast state. Deliberately separate from scroll_delta_* / scroll_axis_lock
+     * so that releasing the scroll layer, which resets those, leaves a flick
+     * already in flight alone. */
+    int64_t scroll_last_tick_time;    /* uptime ms of the last emitted tick */
+    int32_t scroll_tick_interval_ms;  /* smoothed gap between emitted ticks */
+    uint16_t scroll_burst_ticks;      /* ticks in the current hand-driven flick */
+    uint16_t scroll_momentum_code;    /* INPUT_REL_WHEEL or INPUT_REL_HWHEEL */
+    int8_t scroll_momentum_value;     /* the exact value that was emitted */
+    int32_t scroll_momentum_interval_ms;
+    uint16_t scroll_momentum_ticks;   /* emitted so far during the coast */
+    bool scroll_momentum_active;
+#endif
     int32_t ball_action_delta_x;
     int32_t ball_action_delta_y;
     int ball_action_pending_idx;
