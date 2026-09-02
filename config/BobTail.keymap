@@ -43,15 +43,38 @@
 #define GESTW  8   /* WIN + GEST */
 #define FN     9
 #define LAYER_INDICATOR 1
-#define IND_NUM  F13
-#define IND_SYM  F16   /* F14/F15 は輝度。F21 は macOS がキーイベントにしない */
+
+/* レイヤー通知（Num/Sym/Gesture/Fn/Mac/Win）は Keyboard page の F13/F16/F17/F18/
+   F19/F20 を送っていたが、これらは Apple のキーボードにも仮想キーコードが
+   割り当てられた「本物の」キーで、macOS が実際に keyDown/keyUp イベントを
+   組み立てる。BobTailBar の CGEvent タップが止まっている瞬間（アクセシビリティが
+   外れた直後、再接続中、タイムアウトで一時停止した直後など）はこのイベントを
+   飲み込めず、前面のアプリへ生の入力として漏れる。多くのアプリは未割り当ての
+   F キーを無視するだけで済むが、環境によってはこれを文字として解釈しようとして
+   「□?」のような文字化けが入力されてしまう。
+
+   Scroll 通知だけは前からこの問題が起きていなかった。F22 に対応する仮想キー
+   コードは Apple のどのキーボードも持たないため、macOS がそもそも keyDown
+   イベントを組み立てず、BobTailBar は IOHID で受け取るだけで CGEvent は
+   一切発生しない（つまり漏れようがない）。
+
+   同じ性質を他の 6 つの通知にも持たせるため、USB HID Usage Tables の Consumer
+   ページで未割り当てのまま空いている 0x01D0–0x01D5（Application Launch
+   Buttons の末尾 0x01CB と Generic GUI Application の先頭 0x0200 のあいだ、
+   0x01CC–0x01FF の 52 個の未割り当て領域の中）を割り当てる。Consumer ページの
+   コードは Keyboard page とはまったく別の HID レポートに乗るので、6 キー
+   ロールオーバーの対象にもならない。ここは macOS はもちろんどの OS のドライバも
+   対応する動作を持たないので、タップが止まっていても文字として現れることはない */
+#define IND_NUM  (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D0))
+#define IND_SYM  (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D1))
+#define IND_GEST (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D2))
+#define IND_FN   (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D3))
+#define IND_MAC  (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D4))
+#define IND_WIN  (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D5))
 /* Scroll 通知は F22。Help だと BobTailBar が飲み込めないとき Finder が
-   カーソル下のフォルダを選択してしまう */
+   カーソル下のフォルダを選択してしまう。F22 に対応する仮想キーコードは無いので
+   上と同じ理由でそのまま安全に使える */
 #define IND_SCRL F22
-#define IND_GEST F17
-#define IND_FN   F18
-#define IND_MAC  F19
-#define IND_WIN  F20
 
 #if LAYER_INDICATOR
 

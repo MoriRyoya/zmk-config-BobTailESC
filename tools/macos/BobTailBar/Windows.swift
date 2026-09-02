@@ -147,12 +147,15 @@ final class KeymapOverlayController: NSWindowController {
         pushPressed()
     }
 
+    /// レイヤーの入り口キーは常に光らせ、それ以外の押しているキーは
+    /// 「押しているキーを強調表示する」がオンのときだけ加える
     func pushPressed() {
-        guard Preferences.shared.keymapHighlightPressed else {
-            hud.board.pressed = []
-            return
+        let state = KeyboardState.shared
+        var indices = Set(state.layerIndicatorIndices)
+        if Preferences.shared.keymapHighlightPressed {
+            indices.formUnion(state.typedIndices)
         }
-        hud.board.pressed = Set(KeyboardState.shared.pressedIndices)
+        hud.board.pressed = indices
     }
 
     /// WKWebView 時代の名残。ネイティブ描画なので起こす必要はない。
@@ -339,7 +342,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     private let overlayBox = NSButton(checkboxWithTitle: "レイヤーキーを押している間、キーマップを画面に重ねる", target: nil, action: nil)
     private let clickThroughBox = NSButton(checkboxWithTitle: "配列の上のクリックは下のアプリへ通す", target: nil, action: nil)
     private let hideOnBaseBox = NSButton(checkboxWithTitle: "ベース（ABC）では隠す", target: nil, action: nil)
-    private let highlightBox = NSButton(checkboxWithTitle: "押しているキーを強調表示する", target: nil, action: nil)
+    private let highlightBox = NSButton(checkboxWithTitle: "それ以外の押しているキーも強調表示する", target: nil, action: nil)
     private let pressedColorWell = NSColorWell()
     private let layerColorWell = NSColorWell()
     private let opacity = NSSlider()
@@ -491,7 +494,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     }
 
     private func keymapTab() -> NSView {
-        let hint = NSTextField(wrappingLabelWithString: "Num / Sym / Fn などを押している間、そのレイヤーの配列が画面に重なります。離すと消えます。")
+        let hint = NSTextField(wrappingLabelWithString: "Num / Sym / Fn などを押している間、そのレイヤーの配列が画面に重なります。離すと消えます。そのレイヤーへ入るキー自体は常に光ります。")
         hint.textColor = .secondaryLabelColor
 
         overlayBox.target = self
@@ -961,8 +964,11 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         let state = KeyboardState.shared
         keymapCaption.stringValue = "いまのレイヤー: \(state.layerName)（\(state.effectiveOS)）"
         keymapPreview.keys = KeymapLayers.keys(layerId: state.layerId, os: state.effectiveOS)
-        keymapPreview.pressed = Preferences.shared.keymapHighlightPressed
-            ? Set(state.pressedIndices) : []
+        var previewPressed = Set(state.layerIndicatorIndices)
+        if Preferences.shared.keymapHighlightPressed {
+            previewPressed.formUnion(state.typedIndices)
+        }
+        keymapPreview.pressed = previewPressed
         overlayBox.state = Preferences.shared.keymapOverlayEnabled ? .on : .off
         refreshKeymapSource()
     }

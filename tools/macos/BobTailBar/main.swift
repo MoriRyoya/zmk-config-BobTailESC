@@ -2,10 +2,13 @@
 //  BobTailBar — BobTailESC 用 macOS メニューバー常駐アプリ
 //
 //  1. 現在のレイヤーをメニューバーにリアルタイム表示する
-//     キーボードは各レイヤーを保持している間 F13 / F16–F18 / F22 を押しっぱなしにする。
-//     F14 / F15 は macOS の輝度キー。F21 / F22 はキーイベントにならないので
-//     アプリへ漏れない（Scroll は F22。昔の Help も HID で読む）。
-//     本アプリは HID で受け取って表示に変え、CGEvent になるキーは他アプリに渡さない。
+//     キーボードは各レイヤーを保持している間、専用の HID コードを押しっぱなしにする。
+//     Scroll は Keyboard page の F22、他（Num/Sym/Gesture/Fn/Mac/Win）は
+//     Consumer page の未割り当てコード（0x01D0–0x01D5）。どちらも macOS が
+//     keyDown イベントを組み立てないので、アプリへ文字として漏れない
+//     （昔の Help キーも互換のため HID で読む）。
+//     本アプリは HID で受け取って表示に変える。CGEvent になる普通のキーは
+//     押しているキーのハイライト用に見るだけで、他アプリへは渡す。
 //  2. 左右それぞれのバッテリー残量を % で表示する
 //     ZMK が公開する 2 つの Battery Service を CoreBluetooth で直接読む。
 //  3. ジェスチャのボール変換はファームウェア側。本アプリはレイヤー表示とバッテリー用
@@ -20,29 +23,44 @@ import IOKit.hid
 // MARK: - キーボードから送られてくる通知キー (macOS の仮想キーコード)
 
 enum IndicatorKey {
-    static let num: Int64 = 105     // F13  Num+Nav
-    static let sym: Int64 = 106     // F16  (F15 は輝度＋、F21 は macOS が無視)
+    // Num/Sym/Gesture/Fn/Mac/Win は Consumer page の未割り当てコード（0x01D0–0x01D5）で
+    // 届く。macOS のどのキーボードにも対応する仮想キーコードが無いので、
+    // アクセシビリティが外れていても keyDown/keyUp イベントは一切組み立てられず、
+    // BobTailBar のタップが止まっていても前面のアプリへ文字として漏れない
+    // （ファームウェア側の理由は config/BobTail.keymap の IND_* 定義そばを参照）。
+    // 内部 ID は 1000 番台にして、実在の macOS 仮想キーコード（0–127 程度）や
+    // pressedCodes に載る値と絶対に衝突しないようにしてある
+    static let num: Int64 = 1001
+    static let sym: Int64 = 1002
     static let scroll: Int64 = 114  // 内部 ID（旧 Help の仮想キーコード。F22 は CGEvent にならない）
-    static let gesture: Int64 = 64  // F17
-    static let fn: Int64 = 79       // F18
-    static let macMode: Int64 = 80  // F19
-    static let winMode: Int64 = 90  // F20
+    static let gesture: Int64 = 1003
+    static let fn: Int64 = 1004
+    static let macMode: Int64 = 1005
+    static let winMode: Int64 = 1006
 
     static let all: Set<Int64> = [num, sym, scroll, gesture, fn, macMode, winMode]
 
-    /// USB HID Keyboard usage → 内部 ID
-    static func fromHIDUsage(_ usage: UInt32) -> Int64? {
-        switch usage {
-        case 0x68: return num      // F13
-        case 0x6B: return sym      // F16
-        case 0x71: return scroll   // F22（現行。macOS はキーイベントにしない）
-        case 0x75: return scroll   // Help（旧ファームウェア）
-        case 0x6C: return gesture  // F17
-        case 0x6D: return fn       // F18
-        case 0x6E: return macMode  // F19
-        case 0x6F: return winMode  // F20
-        default: return nil
+    /// USB HID usage（Keyboard page か Consumer page）→ 内部 ID
+    static func fromHIDUsage(page: UInt32, usage: UInt32) -> Int64? {
+        if page == UInt32(kHIDPage_Consumer) {
+            switch usage {
+            case 0x01D0: return num
+            case 0x01D1: return sym
+            case 0x01D2: return gesture
+            case 0x01D3: return fn
+            case 0x01D4: return macMode
+            case 0x01D5: return winMode
+            default: return nil
+            }
         }
+        if page == UInt32(kHIDPage_KeyboardOrKeypad) {
+            switch usage {
+            case 0x71: return scroll   // F22（現行。macOS はキーイベントにしない）
+            case 0x75: return scroll   // Help（旧ファームウェア）
+            default: return nil
+            }
+        }
+        return nil
     }
 }
 
@@ -55,13 +73,22 @@ enum ArrowKey {
 
 /// macOS 仮想キーコード → キーマップ上の物理位置
 enum KeyHighlight {
-    static func indices(codes: Set<Int64>, held: Set<Int64>, layer: String) -> [Int] {
+    /// いま保持しているレイヤーの「入り口」キー。強調表示のオン / オフに関係なく、
+    /// レイヤーバッジと同じ意味の常時表示として使う
+    static func layerIndices(held: Set<Int64>) -> [Int] {
         var out = Set<Int>()
         if held.contains(IndicatorKey.num) { out.insert(39) }
         if held.contains(IndicatorKey.sym) { out.insert(40) }
         if held.contains(IndicatorKey.gesture) { out.insert(37) }
         if held.contains(IndicatorKey.fn) { out.insert(16) }
         if held.contains(IndicatorKey.scroll) { out.insert(19) }
+        return out.sorted()
+    }
+
+    /// レイヤーの入り口キー以外で、実際にいま押しているキー。
+    /// 「押しているキーを強調表示する」トグルの対象
+    static func typedIndices(codes: Set<Int64>, layer: String) -> [Int] {
+        var out = Set<Int>()
         for code in codes {
             for index in map(code, layer: layer) { out.insert(index) }
         }
@@ -277,8 +304,14 @@ final class KeyboardState {
 
     var isGestureLayerHeld: Bool { held.contains(IndicatorKey.gesture) }
 
-    var pressedIndices: [Int] {
-        KeyHighlight.indices(codes: pressedCodes, held: held, layer: layerId)
+    /// レイヤーの入り口キー。強調表示のトグルに関係なく常に光らせる
+    var layerIndicatorIndices: [Int] {
+        KeyHighlight.layerIndices(held: held)
+    }
+
+    /// レイヤーの入り口キー以外で、実際に押しているキー。トグルの対象
+    var typedIndices: [Int] {
+        KeyHighlight.typedIndices(codes: pressedCodes, layer: layerId)
     }
 
     func press(_ key: Int64) {
@@ -431,10 +464,20 @@ final class EventTapMonitor {
 
     private func startHID() {
         let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        let matching: [[String: Any]] = [[
-            kIOHIDDeviceUsagePageKey as String: kHIDPage_GenericDesktop,
-            kIOHIDDeviceUsageKey as String: kHIDUsage_GD_Keyboard,
-        ]]
+        // レイヤー通知は Keyboard ページ（Scroll = F22）と Consumer ページ
+        // （Num/Sym/Gesture/Fn/Mac/Win）の 2 系統に分かれているので、両方の
+        // トップレベルコレクションにマッチさせる。片方だけだと Consumer 側の
+        // 通知が一切届かない
+        let matching: [[String: Any]] = [
+            [
+                kIOHIDDeviceUsagePageKey as String: kHIDPage_GenericDesktop,
+                kIOHIDDeviceUsageKey as String: kHIDUsage_GD_Keyboard,
+            ],
+            [
+                kIOHIDDeviceUsagePageKey as String: kHIDPage_Consumer,
+                kIOHIDDeviceUsageKey as String: kHIDUsage_Csmr_ConsumerControl,
+            ],
+        ]
         IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
         let ctx = Unmanaged.passUnretained(self).toOpaque()
         IOHIDManagerRegisterInputValueCallback(manager, { context, _, _, value in
@@ -462,8 +505,7 @@ final class EventTapMonitor {
         let page = IOHIDElementGetUsagePage(element)
         let usage = IOHIDElementGetUsage(element)
         let down = IOHIDValueGetIntegerValue(value) != 0
-        guard page == UInt32(kHIDPage_KeyboardOrKeypad) else { return }
-        guard let key = IndicatorKey.fromHIDUsage(usage) else { return }
+        guard let key = IndicatorKey.fromHIDUsage(page: page, usage: usage) else { return }
         if down {
             KeyboardState.shared.press(key)
         } else {
