@@ -157,7 +157,7 @@ config PMW3610_SCROLL_MOMENTUM_MIN_INTERVAL_MS
 
 config PMW3610_SCROLL_MOMENTUM_MAX_INTERVAL_MS
 	int "Slowest coast interval in ms before the coast ends"
-	default 140
+	default 100
 	range 40 1000
 	help
 	  Also the cutoff for starting: a scroll slower than this was a deliberate
@@ -165,22 +165,26 @@ config PMW3610_SCROLL_MOMENTUM_MAX_INTERVAL_MS
 
 config PMW3610_SCROLL_MOMENTUM_DECAY_PERMILLE
 	int "Per-tick slowdown, in permille of the current interval"
-	default 1150
+	default 1300
 	range 1010 3000
 	help
-	  1150 stretches each gap by 15%. With the default interval range that is
-	  roughly 14 coasted ticks over about 0.8 s.
+	  1300 stretches each gap by 30%. With the default interval range that is
+	  roughly 7 coasted ticks over about 0.3 s -- enough to read as a trailing
+	  edge, not enough to feel like the wheel is still spinning on its own.
 
 config PMW3610_SCROLL_MOMENTUM_MIN_TICKS
 	int "Ticks required in one flick before it may coast"
-	default 2
+	default 5
 	range 1 20
 	help
-	  Stops a single stray tick from launching a coast.
+	  A small nudge (a couple of ticks) should stop exactly where the hand
+	  left it. Only a real flick -- enough ticks to show intent -- earns a
+	  coast. Too low and every short scroll drags on past where the hand
+	  stopped.
 
 config PMW3610_SCROLL_MOMENTUM_MAX_TICKS
 	int "Hard cap on coasted ticks"
-	default 60
+	default 40
 	range 1 500
 
 endif # PMW3610_SCROLL_MOMENTUM
