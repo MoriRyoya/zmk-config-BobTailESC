@@ -6,7 +6,7 @@ let source = try String(contentsOf: repo.appendingPathComponent("config/BobTail.
 UserDefaults.standard.setVolatileDomain([
     "osSource": "mac", "keymapSourceKind": "folder", "keymapFolderPath": repo.path,
     "scrollSmoothingEnabled": true, "scrollSpeed": 1.0,
-    "scrollMomentum": ScrollPhysics.firmwareMomentum, "scrollResponse": 0.024
+    "scrollMomentum": ScrollPhysics.standardMomentum, "scrollResponse": 0.024
 ], forName: UserDefaults.argumentDomain)
 
 for enabled in [true, false] {

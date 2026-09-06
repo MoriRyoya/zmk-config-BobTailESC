@@ -9,20 +9,20 @@ import Foundation
 /// instead, as the first version did, quietly tied "does this flick coast at
 /// all" to the speed setting: at 0.25x nothing ever coasted.
 ///
-/// The coast reproduces the firmware engine it replaced
-/// (`CONFIG_PMW3610_SCROLL_MOMENTUM`, now off in BobTail_R.conf). That engine
-/// emitted a wheel tick every `interval`, stretched `interval` by
-/// `DECAY_PERMILLE` after each one, and gave up once it passed
-/// `MAX_INTERVAL_MS`. Stretching a gap by a fixed ratio per tick is the same as
-/// stretching it at a fixed rate per second, so in continuous time
+/// The coast is the deceleration every touch surface on the machine already
+/// uses: velocity decays exponentially from the speed the ball was actually
+/// travelling, so distance is `speed * momentum` and the tail arrives smoothly
+/// instead of being cut off. `momentum` *is* that time constant in seconds, and
+/// 0.50 is UIScrollView's normal deceleration rate (0.998 per ms) to three
+/// decimal places -- which is why it reads as the machine behaving normally
+/// rather than as an effect.
 ///
-///     interval(t) = interval0 + (growth - 1) * t
-///     speed(t)    = 1 / interval(t)                    ticks per second
-///     ticks(a, b) = ln(interval(b) / interval(a)) / (growth - 1)
-///
-/// which is what `step` integrates. At the firmware defaults -- 16 ms floor,
-/// 100 ms cutoff, 1.3x growth -- that is 6.1 ticks over 0.28 s: the same coast,
-/// drawn as smooth pixels instead of seven discrete notches.
+/// The driver's own coast, which this replaced, ran a different curve: it
+/// stretched the gap between wheel ticks by 30% each time and gave up once the
+/// gap passed 100 ms. That is about six ticks in a quarter of a second, and it
+/// was tuned for discrete notches on a wheel rather than for pixels. Matching
+/// it exactly turned out to be the wrong target -- it is over before the eye
+/// reads it as motion at all.
 struct ScrollPhysics {
     struct Frame {
         var x: Double = 0
@@ -36,23 +36,34 @@ struct ScrollPhysics {
     /// wheel reports turned into before the smoothing moved here.
     static let basePixelsPerTick = 48.0
 
-    // Firmware reference values, from pmw3610/Kconfig. Named so the driver and
-    // the app can be compared line by line.
-    static let settle = 0.070            // SCROLL_MOMENTUM_SETTLE_MS
-    static let minInterval = 0.016       // SCROLL_MOMENTUM_MIN_INTERVAL_MS
-    static let cutoffInterval = 0.100    // SCROLL_MOMENTUM_MAX_INTERVAL_MS
-    static let firmwareGrowth = 1.3      // SCROLL_MOMENTUM_DECAY_PERMILLE
-    static let minTicks = 5.0            // SCROLL_MOMENTUM_MIN_TICKS
-    static let maxTicks = 40.0           // SCROLL_MOMENTUM_MAX_TICKS
+    // Coast presets. The value is the exponential time constant in seconds, so
+    // a flick travels `speed * momentum` and lasts `momentum * ln(speed/stop)`.
+    static let weakMomentum = 0.22
+    static let standardMomentum = 0.50
+    static let strongMomentum = 0.90
 
-    /// The slider position that lands exactly on the firmware defaults.
-    static let firmwareMomentum = 0.5
+    /// Under half a pixel per frame: the coast is over, whatever the maths say.
+    static let stopSpeed = 60.0             // px/s
+    static let maxCoastSeconds = 4.0
+    static let maxCoastTicks = 200.0
+    /// Fastest entry speed the coast will take, so a stutter in the reports
+    /// cannot launch the page into orbit.
+    static let maxFlickSpeed = 150.0        // ticks/s
+    /// The flick the settings window quotes: one tick every 16 ms.
+    static let referenceFlickSpeed = 62.5   // ticks/s
+
+    // When a burst counts as a flick at all. Both come from the driver, which
+    // got this part right: a couple of ticks of precision work has to stop
+    // exactly where the hand left it.
+    static let settle = 0.070               // SCROLL_MOMENTUM_SETTLE_MS
+    static let cutoffInterval = 0.100       // SCROLL_MOMENTUM_MAX_INTERVAL_MS
+    static let minTicks = 5.0               // SCROLL_MOMENTUM_MIN_TICKS
 
     var pixelsPerTick = ScrollPhysics.basePixelsPerTick
     /// Seconds for the direct scroll to catch up with the hand.
     var response = 0.024
-    /// 0 turns the coast off. 0.5 is the firmware.
-    var momentum = ScrollPhysics.firmwareMomentum
+    /// Coast time constant in seconds. 0 turns the coast off.
+    var momentum = ScrollPhysics.standardMomentum
 
     private(set) var active = false
     private var coasting = false
@@ -66,27 +77,31 @@ struct ScrollPhysics {
     private var intervalSamples = 0
     private var finishRequested = false
     private var coastDirX = 0.0, coastDirY = 0.0
-    private var coastInterval = 0.0
+    private var coastSpeed = 0.0
+    private var coastTau = 0.0
     private var coastTicks = 0.0
-    private var coastGrowth = 0.0
-    private var coastCeiling = 0.0
+    private var coastElapsed = 0.0
 
-    /// How the slider maps onto the firmware's two coast parameters. 0.5 lands
-    /// on the shipped driver values; the ends are a real 0.5-to-15 tick spread,
-    /// so moving the control actually shows up on screen.
-    static func coastShape(momentum: Double) -> (growth: Double, ceiling: Double)? {
-        let m = min(1, max(0, momentum))
-        guard m > 0 else { return nil }
-        let growth = 1 + (firmwareGrowth - 1) * (firmwareMomentum / max(0.05, m))
-        let ceiling = minInterval + (cutoffInterval - minInterval) * (firmwareMomentum + m)
-        return (growth, ceiling)
+    /// What a hard flick does at this setting. The settings window quotes both
+    /// numbers, so the slider says what it does instead of being a bare
+    /// percentage.
+    static func coastPreview(momentum: Double,
+                             pixelsPerTick: Double = ScrollPhysics.basePixelsPerTick)
+        -> (ticks: Double, seconds: Double) {
+        let tau = max(0, momentum)
+        let stop = stopSpeed / max(1, pixelsPerTick)
+        guard tau > 0, referenceFlickSpeed > stop else { return (0, 0) }
+        return (min(maxCoastTicks, tau * (referenceFlickSpeed - stop)),
+                min(maxCoastSeconds, tau * log(referenceFlickSpeed / stop)))
     }
 
-    /// Ticks a full-speed flick coasts at this setting. The settings window
-    /// shows it so the slider says what it does.
-    static func coastTicks(momentum: Double) -> Double {
-        guard let shape = coastShape(momentum: momentum), shape.ceiling > minInterval else { return 0 }
-        return min(maxTicks, log(shape.ceiling / minInterval) / (shape.growth - 1))
+    /// How long the ball has to be still before the coast takes over. A fast
+    /// flick is unmistakable after two or three missed reports, and waiting the
+    /// full settle there shows up as the page stopping and then setting off
+    /// again. A slow drag gets the full window, so it is never mistaken for one.
+    private var coastDelay: Double {
+        guard intervalSamples > 0 else { return Self.settle }
+        return min(Self.settle, max(0.035, 3 * tickInterval))
     }
 
     /// `x` and `y` are signed tick counts, not pixels. The firmware locks the
@@ -157,7 +172,7 @@ struct ScrollPhysics {
 
         let alpha = 1 - exp(-elapsed / max(0.01, response))
         var dx = pendingX * alpha, dy = pendingY * alpha
-        let idle = finishRequested || time - lastInput >= Self.settle
+        let idle = finishRequested || time - lastInput >= coastDelay
         // Thresholds stay in pixels: a tick is worth whatever the speed
         // setting says, so a tick-sized epsilon would move with the slider.
         let scale = max(1, pixelsPerTick)
@@ -178,39 +193,44 @@ struct ScrollPhysics {
     }
 
     /// The driver's own test for "was that a flick": enough ticks to show
-    /// intent, spaced closely enough to still be moving. A couple of ticks of
-    /// precision work stops exactly where the hand left it.
+    /// intent, spaced closely enough that the ball was still moving.
     private mutating func startCoast() -> Bool {
-        guard let shape = Self.coastShape(momentum: momentum),
+        guard momentum > 0,
               burstTicks >= Self.minTicks,
               intervalSamples > 0,
+              tickInterval > 0,
               tickInterval <= Self.cutoffInterval
         else { return false }
-        let start = max(Self.minInterval, tickInterval)
-        guard start < shape.ceiling else { return false }
         let speed = hypot(lastX, lastY)
         guard speed > 0 else { return false }
         coastDirX = lastX / speed
         coastDirY = lastY / speed
-        coastInterval = start
-        coastGrowth = shape.growth
-        coastCeiling = shape.ceiling
+        // How committed the flick was. The ball reaches full tick rate in
+        // three or four reports, so without this a 7 mm nudge would fling the
+        // page as far as a deliberate throw. Full weight from twice the
+        // threshold up, which is still well under a centimetre of ball.
+        let commitment = min(1, burstTicks / (2 * Self.minTicks))
+        coastSpeed = min(Self.maxFlickSpeed, commitment / tickInterval)
+        coastTau = momentum
         coastTicks = 0
+        coastElapsed = 0
         coasting = true
         return true
     }
 
     private mutating func coastFrames(elapsed: Double) -> [Frame] {
-        let rate = coastGrowth - 1
-        let before = coastInterval
-        coastInterval += rate * elapsed
-        let ticks = log(coastInterval / before) / rate
+        let decay = exp(-elapsed / coastTau)
+        let ticks = coastSpeed * coastTau * (1 - decay)
+        coastSpeed *= decay
         coastTicks += ticks
+        coastElapsed += elapsed
         var frames = [Frame(x: coastDirX * ticks * pixelsPerTick,
                             y: coastDirY * ticks * pixelsPerTick,
                             momentum: coastBegan ? 2 : 1)]
         coastBegan = true
-        if coastInterval >= coastCeiling || coastTicks >= Self.maxTicks {
+        if coastSpeed * pixelsPerTick < Self.stopSpeed
+            || coastTicks >= Self.maxCoastTicks
+            || coastElapsed >= Self.maxCoastSeconds {
             frames += cancel()
         }
         return frames

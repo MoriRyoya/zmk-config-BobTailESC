@@ -364,6 +364,14 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     private let thresholdLabel = NSTextField(labelWithString: "")
     private let cooldownLabel = NSTextField(labelWithString: "")
     private let scrollBox = NSButton(checkboxWithTitle: "BobTail のスクロールをなめらかにする", target: nil, action: nil)
+    /// 慣性のプリセット。最後の「カスタム」はつまみを動かしたときに点く表示専用。
+    private static let momentumPresets: [(title: String, value: Double)] = [
+        ("オフ", 0),
+        ("弱め", ScrollPhysics.weakMomentum),
+        ("標準", ScrollPhysics.standardMomentum),
+        ("強め", ScrollPhysics.strongMomentum),
+    ]
+    private let momentumPreset = NSSegmentedControl()
     private let scrollSpeed = NSSlider()
     private let scrollMomentum = NSSlider()
     private let scrollResponse = NSSlider()
@@ -744,15 +752,27 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             slider.isContinuous = true
             slider.widthAnchor.constraint(equalToConstant: 240).isActive = true
         }
-        let hint = NSTextField(wrappingLabelWithString: "BobTail のトラックボールに速度と慣性を設定します。Mac のトラックパッドの動作には影響しません。慣性 50% がキーボード側で慣性を持っていた頃と同じ効きで、0% にすると指を止めた位置でぴたりと止まります。数目盛りの小さいスクロールはどの設定でも流れません。応答時間を短くすると動き始めが速く、長くするとなめらかになります。")
+        momentumPreset.segmentCount = Self.momentumPresets.count + 1
+        for (index, preset) in Self.momentumPresets.enumerated() {
+            momentumPreset.setLabel(preset.title, forSegment: index)
+        }
+        // 「カスタム」はつまみを動かした状態を映すだけの表示で、押しても何も
+        // 起きない。押されたら選択だけ元へ戻す。
+        momentumPreset.setLabel("カスタム", forSegment: Self.momentumPresets.count)
+        momentumPreset.segmentStyle = .rounded
+        momentumPreset.trackingMode = .selectOne
+        momentumPreset.target = self
+        momentumPreset.action = #selector(momentumPresetChanged)
+        let hint = NSTextField(wrappingLabelWithString: "BobTail のトラックボールに速度と慣性を設定します。Mac のトラックパッドの動作には影響しません。まずプリセットを選んで、足りなければ下のつまみで詰めてください。数目盛りの小さいスクロールは、どの設定でも流れずに指を止めた位置で止まります。応答時間を短くすると動き始めが速く、長くするとなめらかになります。")
         hint.textColor = .secondaryLabelColor
         let firmware = NSTextField(wrappingLabelWithString: "この調整には、キーボード側の慣性を無効にした新しい BobTail ファームウェアの書き込みが必要です。またアクセシビリティと入力監視の両方の許可がいります（前者でホイールを差し替え、後者で「BobTail のホイールだ」と確認します）。どちらかが欠けていると、慣性は黙って効かなくなります。メニューの「キー監視」の行で今の状態を確認できます。")
         firmware.textColor = .secondaryLabelColor
         let reset = NSButton(title: "標準に戻す", target: self, action: #selector(resetScroll))
         let stack = NSStackView(views: [
             scrollBox, hint,
+            labeled("慣性", momentumPreset),
+            labeled("微調整", scrollMomentum), scrollMomentumLabel,
             labeled("速度", scrollSpeed), scrollSpeedLabel,
-            labeled("慣性", scrollMomentum), scrollMomentumLabel,
             labeled("応答時間", scrollResponse), scrollResponseLabel,
             reset, firmware,
         ])
@@ -928,32 +948,46 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         refreshScrollLabels()
     }
 
+    @objc private func momentumPresetChanged() {
+        guard !isReloading else { return }
+        let index = momentumPreset.selectedSegment
+        guard Self.momentumPresets.indices.contains(index) else {
+            refreshScrollLabels()   // 「カスタム」を押した: 選択を実際の値へ戻す
+            return
+        }
+        scrollMomentum.doubleValue = Self.momentumPresets[index].value
+        scrollChanged()
+    }
+
     @objc private func resetScroll() {
         scrollBox.state = .on
         scrollSpeed.doubleValue = 1
-        scrollMomentum.doubleValue = ScrollPhysics.firmwareMomentum
+        scrollMomentum.doubleValue = ScrollPhysics.standardMomentum
         scrollResponse.doubleValue = 24
         scrollChanged()
     }
 
     private func refreshScrollLabels() {
-        // つまみが何をしているのか数字で出す。慣性はファームウェアと同じ
-        // 「目盛り何個ぶん流れるか」で書く
+        // つまみが何をしているのか数字で出す。慣性は「弾いた後どれだけ流れるか」
+        // で書く。パーセントだけだと、どの位置がどう効くのか分からない
         let perTick = ScrollPhysics.basePixelsPerTick * scrollSpeed.doubleValue
         scrollSpeedLabel.stringValue = String(format: "%.2f 倍（1 目盛り = %.0f px）", scrollSpeed.doubleValue, perTick)
-        let ticks = ScrollPhysics.coastTicks(momentum: scrollMomentum.doubleValue)
-        let firmware = abs(scrollMomentum.doubleValue - ScrollPhysics.firmwareMomentum) < 0.005
-        if ticks < 0.5 {
-            scrollMomentumLabel.stringValue = String(format: "%.0f%%（流れない）", scrollMomentum.doubleValue * 100)
+        let momentum = scrollMomentum.doubleValue
+        let coast = ScrollPhysics.coastPreview(momentum: momentum, pixelsPerTick: perTick)
+        if coast.ticks < 0.5 {
+            scrollMomentumLabel.stringValue = "慣性なし（指を止めた位置で止まります）"
         } else {
             scrollMomentumLabel.stringValue = String(
-                format: "%.0f%%（弾いた後 約 %.0f 目盛り = %.0f px 流れる）%@",
-                scrollMomentum.doubleValue * 100, ticks, ticks * perTick,
-                firmware ? " ← 以前のファームウェアと同じ" : "")
+                format: "強く弾いたとき 約 %.0f px（%.0f 目盛り）を %.1f 秒かけて流れます",
+                coast.ticks * perTick, coast.ticks, coast.seconds)
         }
+        // プリセットに一致していればそれを、外れていれば「カスタム」を点ける。
+        let match = Self.momentumPresets.firstIndex { abs($0.value - momentum) < 0.005 }
+        momentumPreset.selectedSegment = match ?? Self.momentumPresets.count
         scrollResponseLabel.stringValue = String(format: "%.0f ms", scrollResponse.doubleValue)
         let enabled = scrollBox.state == .on
         for slider in [scrollSpeed, scrollMomentum, scrollResponse] { slider.isEnabled = enabled }
+        for index in 0..<momentumPreset.segmentCount { momentumPreset.setEnabled(enabled, forSegment: index) }
     }
 
     @objc private func overlayScaleChanged() {

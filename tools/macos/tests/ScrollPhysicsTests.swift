@@ -7,7 +7,7 @@ enum ScrollPhysicsTests {
     /// Roll the ball: `count` single-tick reports spaced `interval` apart, then
     /// let the engine settle.
     static func roll(interval: Double, count: Int,
-                     momentum: Double = ScrollPhysics.firmwareMomentum,
+                     momentum: Double = ScrollPhysics.standardMomentum,
                      pixelsPerTick: Double = ScrollPhysics.basePixelsPerTick,
                      hz: Double = 120, release: Bool = false) -> [Stamped] {
         var engine = ScrollPhysics()
@@ -19,7 +19,7 @@ enum ScrollPhysicsTests {
         var next = 0
         var released = false
         var time = start
-        while time < (inputs.last ?? start) + 3 {
+        while time < (inputs.last ?? start) + 6 {
             while next < inputs.count && inputs[next] <= time + 1e-9 {
                 out += engine.feed(x: 0, y: 1, time: inputs[next]).map { (time, $0) }
                 next += 1
@@ -38,9 +38,10 @@ enum ScrollPhysicsTests {
         frames.filter { $0.frame.momentum == 1 || $0.frame.momentum == 2 }
     }
 
-    /// Coast distance measured in device ticks, which is the unit the firmware
-    /// engine worked in and the only one that does not move with the speed.
-    static func coastTicks(_ frames: [Stamped], pixelsPerTick: Double = ScrollPhysics.basePixelsPerTick) -> Double {
+    /// Coast distance in device ticks, the unit the engine works in and the
+    /// only one that does not move with the speed setting.
+    static func coastTicks(_ frames: [Stamped],
+                           pixelsPerTick: Double = ScrollPhysics.basePixelsPerTick) -> Double {
         coasted(frames).reduce(0) { $0 + $1.frame.y } / pixelsPerTick
     }
 
@@ -63,54 +64,76 @@ enum ScrollPhysicsTests {
             precondition(frames.allSatisfy { $0.frame.x == 0 })
         }
 
-        // The driver refused to coast anything under MIN_TICKS, and so does
-        // this. A few ticks of precision work stops where the hand left it.
+        // Precision work stops where the hand left it, at any setting.
         for count in 1...4 {
             precondition(coasted(roll(interval: 0.008, count: count)).isEmpty)
+            precondition(coasted(roll(interval: 0.008, count: count, momentum: 1)).isEmpty)
         }
-        // ...and five ticks is a flick. The pixel-velocity version this
-        // replaced rejected exactly this case: a crisp flick was over in under
-        // 60 ms, so its duration gate threw away the hardest flicks of all.
-        precondition(coastTicks(roll(interval: 0.008, count: 5)) > 5)
+        // A slow drag is not a flick either, however long it runs.
+        precondition(coasted(roll(interval: 0.080, count: 12)).isEmpty)
+        precondition(coasted(roll(interval: 0.080, count: 12, momentum: 1)).isEmpty)
+        // Five ticks is a flick. The pixel-velocity version this replaced
+        // rejected exactly this case: a crisp flick is over in under 60 ms, so
+        // its duration gate threw away the hardest flicks of all.
+        precondition(coastTicks(roll(interval: 0.008, count: 5)) > 10)
 
-        // The default reproduces CONFIG_PMW3610_SCROLL_MOMENTUM: seven wheel
-        // ticks over roughly 0.28 s, now drawn as smooth pixels.
+        // The default has to read as a coast, not as the scroll failing to stop
+        // cleanly. A hard flick carries a screen and a half over about two
+        // seconds; the driver's own curve, which this replaced, was six ticks in
+        // a quarter second and was over before the eye called it motion.
         let flick = roll(interval: 0.016, count: 12)
-        precondition(coastTicks(flick) > 5.5 && coastTicks(flick) < 7)
-        precondition(coastSpan(flick) > 0.22 && coastSpan(flick) < 0.32)
+        precondition(coastTicks(flick) > 25 && coastTicks(flick) < 36)
+        precondition(coastSpan(flick) > 1.6 && coastSpan(flick) < 2.4)
         let steps = coasted(flick).map { $0.frame.y }
         precondition(zip(steps, steps.dropFirst()).allSatisfy { $0 >= $1 - 1e-12 })
         precondition(flick.allSatisfy { $0.frame.x == 0 })
+        // It ends by slowing below what a screen can show, never by being cut
+        // off part way: the last frame is under a pixel.
+        precondition(steps.last! < 1)
 
-        // A slow drag is not a flick, at any setting.
-        precondition(coasted(roll(interval: 0.080, count: 8)).isEmpty)
-        precondition(coasted(roll(interval: 0.080, count: 8, momentum: 1)).isEmpty)
+        // Faster ball, longer coast: the exit speed is the ball's own.
+        precondition(coastTicks(roll(interval: 0.008, count: 20)) > coastTicks(flick))
+        precondition(coastTicks(roll(interval: 0.030, count: 10)) < coastTicks(flick))
+        // A bare five-tick flick is under a centimetre of ball, so it must not
+        // throw the page as far as a committed one.
+        precondition(coastTicks(roll(interval: 0.008, count: 5))
+                     < coastTicks(roll(interval: 0.008, count: 20)) * 0.6)
 
-        // The slider has to be worth touching: monotone, and a ten-fold spread
-        // rather than the same slow drift at every position.
-        let sweep = [0.15, 0.25, 0.5, 0.75, 1.0].map { coastTicks(roll(interval: 0.016, count: 12, momentum: $0)) }
-        precondition(zip(sweep, sweep.dropFirst()).allSatisfy { $0 < $1 })
-        precondition(sweep.last! > 8 * sweep.first!)
+        // The three presets have to be clearly different from each other, in
+        // order, and all of them worth using.
+        let presets = [ScrollPhysics.weakMomentum,
+                       ScrollPhysics.standardMomentum,
+                       ScrollPhysics.strongMomentum].map { coastTicks(roll(interval: 0.016, count: 12, momentum: $0)) }
+        precondition(zip(presets, presets.dropFirst()).allSatisfy { $1 > $0 * 1.5 })
+        precondition(presets[0] > 8)
         precondition(coasted(roll(interval: 0.016, count: 12, momentum: 0)).isEmpty)
-        // The label in the settings window comes from the closed form, so it
-        // has to agree with what the engine actually emits.
-        for momentum in [0.15, 0.5, 1.0] {
-            let measured = coastTicks(roll(interval: 0.016, count: 12, momentum: momentum))
-            precondition(abs(measured - ScrollPhysics.coastTicks(momentum: momentum)) < 0.2)
+        // The settings window quotes the closed form, so it has to agree with
+        // what the engine emits.
+        for momentum in [ScrollPhysics.weakMomentum,
+                         ScrollPhysics.standardMomentum,
+                         ScrollPhysics.strongMomentum] {
+            let frames = roll(interval: 0.016, count: 12, momentum: momentum)
+            let preview = ScrollPhysics.coastPreview(momentum: momentum)
+            precondition(abs(coastTicks(frames) - preview.ticks) < 1)
+            precondition(abs(coastSpan(frames) - preview.seconds) < 0.1)
         }
 
-        // Inertia must not depend on the speed setting. Measuring velocity in
-        // pixels used to tie the two together: at 0.25x nothing ever coasted.
+        // Inertia must never be gated by the speed setting. Measuring velocity
+        // in pixels used to tie the two together: at 0.25x nothing coasted at
+        // all. Pixel travel scales with the setting, as it should, so what is
+        // checked here is the tick count. The few percent it does move is the
+        // stop threshold doing its job -- that one is a pixel criterion, and a
+        // coast goes invisible sooner when a tick is worth less.
         let speeds = [0.25, 1.0, 3.0].map { speed -> Double in
             let pixels = ppt * speed
             return coastTicks(roll(interval: 0.030, count: 10, pixelsPerTick: pixels), pixelsPerTick: pixels)
         }
-        precondition(speeds.allSatisfy { abs($0 - speeds[0]) < 0.001 })
-        precondition(speeds[0] > 1)
+        precondition(speeds.allSatisfy { $0 > 5 })
+        precondition(speeds.max()! < speeds.min()! * 1.25)
 
         // Letting go of the scroll layer does not stop the coast, the same way
         // a trackpad does not stop the instant the fingers lift.
-        precondition(coastTicks(roll(interval: 0.016, count: 8, release: true)) > 5)
+        precondition(coastTicks(roll(interval: 0.016, count: 8, release: true)) > 20)
 
         // A direction reversal discards the pending old tail. Cancel and sleep
         // never burst.
@@ -126,7 +149,7 @@ enum ScrollPhysicsTests {
         precondition(reversing.step(time: 100).allSatisfy { $0.x == 0 && $0.y == 0 })
         precondition(!reversing.active)
 
-        print("Scroll physics: conserved travel, refresh rates, the firmware coast, "
-              + "the flick threshold, slider range, speed independence, reversal and cancellation passed.")
+        print("Scroll physics: conserved travel, refresh rates, the flick threshold, "
+              + "coast length and shape, presets, speed independence, reversal and cancellation passed.")
     }
 }
