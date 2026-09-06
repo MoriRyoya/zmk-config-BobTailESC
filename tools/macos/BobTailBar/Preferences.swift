@@ -132,21 +132,27 @@ final class Preferences {
         set { defaults.set(newValue, forKey: "gestureCooldown"); ping() }
     }
 
+    // Accepted settings from the 1.6 hardware trial.
+    var reverseScroll: Bool {
+        get { defaults.object(forKey: "reverseBobTailScroll") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "reverseBobTailScroll"); ping() }
+    }
+
     var scrollSmoothingEnabled: Bool {
         get { defaults.object(forKey: "scrollSmoothingEnabled") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "scrollSmoothingEnabled"); ping() }
     }
     var scrollSpeed: Double {
-        get { bounded("scrollSpeed", fallback: 1, range: 0.25...3) }
+        get { bounded("scrollSpeed", fallback: 1.64, range: 0.25...3) }
         set { defaults.set(min(3, max(0.25, newValue)), forKey: "scrollSpeed"); ping() }
     }
-    /// 慣性の時定数（秒）。0 で慣性なし、0.50 が標準。
+    /// 標準の余韻の時間尺度。高速・低速では物理入力速度で補正する。
     var scrollMomentum: Double {
-        get { bounded("scrollMomentum", fallback: ScrollPhysics.standardMomentum, range: 0...1) }
+        get { bounded("scrollMomentum", fallback: 0.61, range: 0...1) }
         set { defaults.set(min(1, max(0, newValue)), forKey: "scrollMomentum"); ping() }
     }
     var scrollResponse: Double {
-        get { bounded("scrollResponse", fallback: 0.024, range: 0.01...0.08) }
+        get { bounded("scrollResponse", fallback: 0.010, range: 0.01...0.08) }
         set { defaults.set(min(0.08, max(0.01, newValue)), forKey: "scrollResponse"); ping() }
     }
     private func bounded(_ key: String, fallback: Double, range: ClosedRange<Double>) -> Double {
@@ -154,19 +160,39 @@ final class Preferences {
         return min(range.upperBound, max(range.lowerBound, value))
     }
 
-    /// スクロールの計算はこれまでに二度作り直している。ピクセルから「目盛り」へ
-    /// 移したときに、つまみの値が指す中身が変わり（速度を下げると慣性まで消える、
-    /// といった噛み合わせもあった）、さらに慣性の減衰そのものをトラックパッドと
-    /// 同じ指数関数へ入れ替えた。古いエンジンに合わせて詰めた値をそのまま使うと
-    /// 新しい標準より弱いところから始まってしまうので、版が上がったときに一度
-    /// だけ既定値へ戻す。
+    /// Adopt the user's accepted scroll/pointer settings once for 1.7. The
+    /// 1.6 A/B/C comparison modes are gone, so drop the key that selected them.
     private func migrateScrollDefaultsIfNeeded() {
         let key = "scrollDefaultsVersion"
-        guard defaults.integer(forKey: key) < 3 else { return }
-        for stale in ["scrollSpeed", "scrollMomentum", "scrollResponse"] {
-            defaults.removeObject(forKey: stale)
-        }
-        defaults.set(3, forKey: key)
+        guard defaults.integer(forKey: key) < 7 else { return }
+        defaults.removeObject(forKey: "scrollComparisonMode")
+        defaults.set(true, forKey: "scrollSmoothingEnabled")
+        defaults.set(true, forKey: "reverseBobTailScroll")
+        defaults.set(1.64, forKey: "scrollSpeed")
+        defaults.set(0.61, forKey: "scrollMomentum")
+        defaults.set(0.010, forKey: "scrollResponse")
+        defaults.set(true, forKey: "pointerPrecisionEnabled")
+        defaults.set(0.35, forKey: "pointerPrecisionGain")
+        defaults.set(1.0, forKey: "pointerSpeedGain")
+        defaults.set(1.0, forKey: "pointerSmoothing")
+        defaults.set(7, forKey: key)
+    }
+
+    var pointerPrecisionEnabled: Bool {
+        get { defaults.object(forKey: "pointerPrecisionEnabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "pointerPrecisionEnabled"); ping() }
+    }
+    var pointerPrecisionGain: Double {
+        get { bounded("pointerPrecisionGain", fallback: 0.35, range: 0.15...1) }
+        set { defaults.set(min(1, max(0.15, newValue)), forKey: "pointerPrecisionGain"); ping() }
+    }
+    var pointerSpeedGain: Double {
+        get { bounded("pointerSpeedGain", fallback: 1, range: 0.5...1) }
+        set { defaults.set(min(1, max(0.5, newValue)), forKey: "pointerSpeedGain"); ping() }
+    }
+    var pointerSmoothing: Double {
+        get { bounded("pointerSmoothing", fallback: 1, range: 0...1) }
+        set { defaults.set(min(1, max(0, newValue)), forKey: "pointerSmoothing"); ping() }
     }
 
     /// keyboard = F19/F20 に追従。mac / win ならアプリ側で固定。

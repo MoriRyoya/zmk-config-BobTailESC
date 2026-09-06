@@ -177,6 +177,7 @@ final class KeyboardState {
     var rightBattery: Int?
     var bluetoothStatus = "接続を確認中…"
     var monitorStatus = "キー監視を開始しています…"
+    var motionStatus = "スクロール入力を待っています…"
     /// 他アプリを使っている最中もレイヤーを拾えているか
     private(set) var globalTracking = false
     var gestureEnabled: Bool {
@@ -256,6 +257,11 @@ final class KeyboardState {
     }
 
     var isGestureLayerHeld: Bool { held.contains(IndicatorKey.gesture) }
+
+    /// The Scroll layer is the keyboard's explicit source for trackball wheel
+    /// input. ScrollController uses this as a local fallback when IOHID and
+    /// WindowServer callbacks do not arrive in the same order.
+    var isScrollLayerHeld: Bool { held.contains(IndicatorKey.scroll) }
 
     /// レイヤーの入り口キー。強調表示のトグルに関係なく常に光らせる
     var layerIndicatorIndices: [Int] {
@@ -363,8 +369,15 @@ final class EventTapMonitor {
     private var retryTimer: Timer?
     private let gestures = GestureEngine()
     private let scrolling = ScrollController()
+    private let pointing = PointerController()
+    private var displays: [CGRect] = []
 
     func start() {
+        refreshDisplays()
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            self?.scrolling.cancel(); self?.refreshDisplays(); self?.pointing.reset()
+        }
         // ここでは許可を「見る」だけで「求め」ない。AXIsProcessTrustedWithOptions /
         // IOHIDRequestAccess は未決定の状態で呼ぶと本物のシステムダイアログが立ち、
         // 起動のたびに 2 枚重なって出ていた（しかも Apple 側の既知の不具合で、
@@ -380,6 +393,14 @@ final class EventTapMonitor {
             self?.publishStatus()
         }
         publishStatus()
+    }
+
+    private func refreshDisplays() {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        if CGGetActiveDisplayList(16, &ids, &count) == .success {
+            displays = ids.prefix(Int(count)).map { CGDisplayBounds($0) }
+        }
     }
 
     @discardableResult
@@ -476,6 +497,7 @@ final class EventTapMonitor {
             guard let context, EventTapMonitor.isBobTail(device) else { return }
             let monitor = Unmanaged<EventTapMonitor>.fromOpaque(context).takeUnretainedValue()
             monitor.scrolling.cancel()
+            monitor.pointing.reset()
             KeyboardState.shared.clearHeld()
         }, ctx)
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
@@ -514,6 +536,19 @@ final class EventTapMonitor {
         let page = IOHIDElementGetUsagePage(element)
         let usage = IOHIDElementGetUsage(element)
         let down = IOHIDValueGetIntegerValue(value) != 0
+        if page == UInt32(kHIDPage_Consumer) && usage == 0x01D7 {
+            scrolling.noteBallMotion(active: down)
+            return
+        }
+        if down && page == UInt32(kHIDPage_GenericDesktop) &&
+            (usage == UInt32(kHIDUsage_GD_X) || usage == UInt32(kHIDUsage_GD_Y)) {
+            // Raw motion stops coasting even when a precision filter rounds
+            // the cursor displacement down to zero.
+            scrolling.cancel()
+            pointing.noteMotion(horizontal: usage == UInt32(kHIDUsage_GD_X),
+                                value: Double(IOHIDValueGetIntegerValue(value)))
+            return
+        }
         if down && page == UInt32(kHIDPage_GenericDesktop) && usage == UInt32(kHIDUsage_GD_Wheel) {
             scrolling.noteWheel(horizontal: false, ticks: Double(IOHIDValueGetIntegerValue(value)))
             return
@@ -528,6 +563,7 @@ final class EventTapMonitor {
         }
         guard let key = IndicatorKey.fromHIDUsage(page: page, usage: usage) else { return }
         if down {
+            if key == IndicatorKey.scroll { scrolling.cancel() }
             KeyboardState.shared.press(key)
         } else {
             if key == IndicatorKey.gesture { gestures.cancel() }
@@ -561,6 +597,11 @@ final class EventTapMonitor {
     }
 
     private func publishStatus() {
+        let status = "起動後: スクロール入力 \(scrolling.confirmedInputs) / 補間出力 \(scrolling.generatedFrames) / 慣性出力 \(scrolling.coastFrames) / 微小動作通知 \(scrolling.motionBrakes) / ポインタ調整 \(pointing.processedReports)"
+        if KeyboardState.shared.motionStatus != status {
+            KeyboardState.shared.motionStatus = status
+            KeyboardState.shared.notifyUI()
+        }
         let tapLive = tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
         // レイヤー通知は全部 CGEvent を発生させない usage で送っているので、
         // レイヤー表示が他アプリでも追従するかどうかは入力監視（IOHID）だけで決まる。
@@ -598,6 +639,7 @@ final class EventTapMonitor {
             return Unmanaged.passUnretained(event)
 
         case .scrollWheel:
+            pointing.reset()
             if scrolling.handle(event) { return nil }
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             scrolling.cancel()
@@ -633,7 +675,10 @@ final class EventTapMonitor {
             return nil
 
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
-            scrolling.cancel()
+            if event.getIntegerValueField(.mouseEventDeltaX) != 0 || event.getIntegerValueField(.mouseEventDeltaY) != 0 {
+                scrolling.cancel()
+                pointing.handle(event, displays: displays)
+            }
             // ファームウェアは Gesture 押し中にカーソルを送らない。
             // マウス移動が来た = キーはもう離れている。残りジェスチャは捨てる。
             if state.isGestureLayerHeld {

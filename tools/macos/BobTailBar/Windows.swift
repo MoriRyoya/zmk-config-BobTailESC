@@ -363,13 +363,20 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     private let cooldown = NSSlider()
     private let thresholdLabel = NSTextField(labelWithString: "")
     private let cooldownLabel = NSTextField(labelWithString: "")
-    private let scrollBox = NSButton(checkboxWithTitle: "BobTail のスクロールをなめらかにする", target: nil, action: nil)
+    private let scrollBox = NSButton(checkboxWithTitle: "BobTailBar の慣性スクロールを使う", target: nil, action: nil)
+    private let reverseScrollBox = NSButton(checkboxWithTitle: "リバーススクロール（方向を反転）", target: nil, action: nil)
+    private let motionStatus = NSTextField(wrappingLabelWithString: "")
+    private let pointerBox = NSButton(checkboxWithTitle: "BobTail の微調整と揺れの抑制を使う", target: nil, action: nil)
+    private let pointerPrecision = NSSlider()
+    private let pointerSpeed = NSSlider()
+    private let pointerSmooth = NSSlider()
+    private let pointerValues = NSTextField(wrappingLabelWithString: "")
     /// 慣性のプリセット。最後の「カスタム」はつまみを動かしたときに点く表示専用。
     private static let momentumPresets: [(title: String, value: Double)] = [
         ("オフ", 0),
-        ("弱め", ScrollPhysics.weakMomentum),
-        ("標準", ScrollPhysics.standardMomentum),
-        ("強め", ScrollPhysics.strongMomentum),
+        ("弱め", GlidePhysics.weakMomentum),
+        ("標準", GlidePhysics.standardMomentum),
+        ("強め", GlidePhysics.strongMomentum),
     ]
     private let momentumPreset = NSSegmentedControl()
     private let scrollSpeed = NSSlider()
@@ -442,6 +449,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         tabs.addTabViewItem(tab("キーマップ", view: keymapTab()))
         tabs.addTabViewItem(tab("ジェスチャ", view: gestureTab()))
         tabs.addTabViewItem(tab("スクロール", view: scrollTab()))
+        tabs.addTabViewItem(tab("ポインタ", view: pointerTab()))
         tabs.addTabViewItem(tab("一般", view: generalTab()))
         return tabs
     }
@@ -737,6 +745,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     }
 
     private func scrollTab() -> NSView {
+        reverseScrollBox.target = self
+        reverseScrollBox.action = #selector(scrollChanged)
         scrollBox.target = self
         scrollBox.action = #selector(scrollChanged)
         scrollSpeed.minValue = 0.25
@@ -763,24 +773,66 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         momentumPreset.trackingMode = .selectOne
         momentumPreset.target = self
         momentumPreset.action = #selector(momentumPresetChanged)
-        let hint = NSTextField(wrappingLabelWithString: "BobTail のトラックボールに速度と慣性を設定します。Mac のトラックパッドの動作には影響しません。まずプリセットを選んで、足りなければ下のつまみで詰めてください。数目盛りの小さいスクロールは、どの設定でも流れずに指を止めた位置で止まります。応答時間を短くすると動き始めが速く、長くするとなめらかになります。")
+        let hint = NSTextField(wrappingLabelWithString: "標準は「滑らか」です。少し転がして離すと滑り、後半ほど減衰が強くなります。微小な動きでの停止には対応ファームウェアが必要です（下の「微小動作通知」で受信数を確認）。静止したボールへの接触だけは検知できません。リバースは縦横共通です。")
         hint.textColor = .secondaryLabelColor
         let firmware = NSTextField(wrappingLabelWithString: "この調整には、キーボード側の慣性を無効にした新しい BobTail ファームウェアの書き込みが必要です。またアクセシビリティと入力監視の両方の許可がいります（前者でホイールを差し替え、後者で「BobTail のホイールだ」と確認します）。どちらかが欠けていると、慣性は黙って効かなくなります。メニューの「キー監視」の行で今の状態を確認できます。")
         firmware.textColor = .secondaryLabelColor
         let reset = NSButton(title: "標準に戻す", target: self, action: #selector(resetScroll))
         let stack = NSStackView(views: [
-            scrollBox, hint,
-            labeled("慣性", momentumPreset),
+            scrollBox, reverseScrollBox, hint,
+            labeled("余韻", momentumPreset),
             labeled("微調整", scrollMomentum), scrollMomentumLabel,
             labeled("速度", scrollSpeed), scrollSpeedLabel,
-            labeled("応答時間", scrollResponse), scrollResponseLabel,
-            reset, firmware,
+            labeled("補間時間", scrollResponse), scrollResponseLabel,
+            reset, motionStatus, NSButton(title: "設定をコピー", target: self, action: #selector(copyScrollSettings)), firmware,
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
-        stretch([hint, firmware], to: stack)
+        stretch([hint, firmware, motionStatus], to: stack)
         return scrollable(stack)
+    }
+
+    private func pointerTab() -> NSView {
+        pointerBox.target = self; pointerBox.action = #selector(pointerChanged)
+        pointerPrecision.minValue = 0.15; pointerPrecision.maxValue = 1
+        pointerSpeed.minValue = 0.5; pointerSpeed.maxValue = 1
+        pointerSmooth.minValue = 0; pointerSmooth.maxValue = 1
+        for slider in [pointerPrecision, pointerSpeed, pointerSmooth] {
+            slider.target = self; slider.action = #selector(pointerChanged); slider.isContinuous = true
+            slider.widthAnchor.constraint(equalToConstant: 240).isActive = true
+        }
+        let hint = NSTextField(wrappingLabelWithString: "小さな動きの感度と揺れを抑え、大きな動きではMac本来の感度に近づけます。Macの加速への上乗せや、過去の座標への引き戻しはしません。倍率はMac本来の移動量に対する比率です。入力監視とアクセシビリティの許可が必要です。")
+        hint.textColor = .secondaryLabelColor
+        let stack = NSStackView(views: [pointerBox, hint,
+            labeled("低速の感度", pointerPrecision), labeled("高速の感度", pointerSpeed),
+            labeled("揺れの抑制", pointerSmooth), pointerValues,
+            NSButton(title: "ポインタを標準に戻す", target: self, action: #selector(resetPointer))])
+        stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
+        stretch([hint, pointerValues], to: stack)
+        return scrollable(stack)
+    }
+
+    @objc private func pointerChanged() {
+        guard !isReloading else { return }
+        let prefs = Preferences.shared
+        prefs.pointerPrecisionEnabled = pointerBox.state == .on
+        prefs.pointerPrecisionGain = pointerPrecision.doubleValue
+        prefs.pointerSpeedGain = pointerSpeed.doubleValue
+        prefs.pointerSmoothing = pointerSmooth.doubleValue
+        refreshPointerLabels()
+    }
+
+    @objc private func resetPointer() {
+        pointerBox.state = .on; pointerPrecision.doubleValue = 0.35
+        pointerSpeed.doubleValue = 1; pointerSmooth.doubleValue = 1
+        pointerChanged()
+    }
+
+    private func refreshPointerLabels() {
+        pointerValues.stringValue = String(format: "低速 %.2f 倍 / 高速 %.2f 倍 / 抑制 %.0f%%",
+            pointerPrecision.doubleValue, pointerSpeed.doubleValue, pointerSmooth.doubleValue * 100)
+        for slider in [pointerPrecision, pointerSpeed, pointerSmooth] { slider.isEnabled = pointerBox.state == .on }
     }
 
     private func generalTab() -> NSView {
@@ -942,10 +994,26 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         guard !isReloading else { return }
         let prefs = Preferences.shared
         prefs.scrollSmoothingEnabled = scrollBox.state == .on
+        prefs.reverseScroll = reverseScrollBox.state == .on
         prefs.scrollSpeed = scrollSpeed.doubleValue
         prefs.scrollMomentum = scrollMomentum.doubleValue
         prefs.scrollResponse = scrollResponse.doubleValue / 1000
         refreshScrollLabels()
+    }
+
+    @objc private func copyScrollSettings() {
+        let prefs = Preferences.shared
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        var text = "BobTailBar " + version
+        text += " / 慣性 " + (prefs.scrollSmoothingEnabled ? "オン" : "オフ")
+        text += " / リバース " + (prefs.reverseScroll ? "オン" : "オフ")
+        text += String(format: " / 速度 %.2f / 余韻 %.2f / 補間 %.0f ms",
+                       prefs.scrollSpeed, prefs.scrollMomentum, prefs.scrollResponse * 1000)
+        text += "\n" + KeyboardState.shared.motionStatus
+        text += "\n" + KeyboardState.shared.monitorStatus
+        text += "\n使用アプリ：\n動き始め・引っ掛かり：\n余韻（短い／適切／長い）：\n方向："
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     @objc private func momentumPresetChanged() {
@@ -961,25 +1029,25 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     @objc private func resetScroll() {
         scrollBox.state = .on
-        scrollSpeed.doubleValue = 1
-        scrollMomentum.doubleValue = ScrollPhysics.standardMomentum
-        scrollResponse.doubleValue = 24
+        reverseScrollBox.state = .on
+        scrollSpeed.doubleValue = 1.64
+        scrollMomentum.doubleValue = 0.61
+        scrollResponse.doubleValue = 10
         scrollChanged()
     }
 
     private func refreshScrollLabels() {
-        // つまみが何をしているのか数字で出す。慣性は「弾いた後どれだけ流れるか」
-        // で書く。パーセントだけだと、どの位置がどう効くのか分からない
-        let perTick = ScrollPhysics.basePixelsPerTick * scrollSpeed.doubleValue
-        scrollSpeedLabel.stringValue = String(format: "%.2f 倍（1 目盛り = %.0f px）", scrollSpeed.doubleValue, perTick)
+        // つまみが何をしているのか数字で出す。余韻は時定数そのものを書く。
+        // パーセントだけだと、どの位置がどう効くのか分からない
+        let perTick = GlidePhysics.basePixelsPerTick * scrollSpeed.doubleValue
+        scrollSpeedLabel.stringValue = String(format: "%.2f 倍（1 目盛り = %.0f px）",
+                                              scrollSpeed.doubleValue, perTick)
         let momentum = scrollMomentum.doubleValue
-        let coast = ScrollPhysics.coastPreview(momentum: momentum, pixelsPerTick: perTick)
-        if coast.ticks < 0.5 {
+        if momentum <= 0 {
             scrollMomentumLabel.stringValue = "慣性なし（指を止めた位置で止まります）"
         } else {
             scrollMomentumLabel.stringValue = String(
-                format: "強く弾いたとき 約 %.0f px（%.0f 目盛り）を %.1f 秒かけて流れます",
-                coast.ticks * perTick, coast.ticks, coast.seconds)
+                format: "余韻の時定数 %.2f 秒（大きいほど長く滑る）", momentum)
         }
         // プリセットに一致していればそれを、外れていれば「カスタム」を点ける。
         let match = Self.momentumPresets.firstIndex { abs($0.value - momentum) < 0.005 }
@@ -1118,6 +1186,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     func pushKeymap() {
         let state = KeyboardState.shared
+        motionStatus.stringValue = state.motionStatus + "\n" + state.monitorStatus
         keymapCaption.stringValue = "いまのレイヤー: \(state.layerName)（\(state.effectiveOS)）"
         keymapPreview.keys = KeymapLayers.resolvedKeys(layerId: state.layerId, os: state.effectiveOS, activeLayers: state.activeLayerIDs)
         var previewPressed = Set(state.layerIndicatorIndices)
@@ -1146,9 +1215,15 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         threshold.doubleValue = prefs.gestureThreshold
         cooldown.doubleValue = prefs.gestureCooldown
         scrollBox.state = prefs.scrollSmoothingEnabled ? .on : .off
+        reverseScrollBox.state = prefs.reverseScroll ? .on : .off
         scrollSpeed.doubleValue = prefs.scrollSpeed
         scrollMomentum.doubleValue = prefs.scrollMomentum
         scrollResponse.doubleValue = prefs.scrollResponse * 1000
+        pointerBox.state = prefs.pointerPrecisionEnabled ? .on : .off
+        pointerPrecision.doubleValue = prefs.pointerPrecisionGain
+        pointerSpeed.doubleValue = prefs.pointerSpeedGain
+        pointerSmooth.doubleValue = prefs.pointerSmoothing
+        refreshPointerLabels()
         loginBox.state = prefs.launchAtLogin ? .on : .off
         overlayBox.state = prefs.keymapOverlayEnabled ? .on : .off
         clickThroughBox.state = prefs.keymapOverlayClickThrough ? .on : .off
