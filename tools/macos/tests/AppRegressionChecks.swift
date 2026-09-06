@@ -5,7 +5,8 @@ let repo = URL(fileURLWithPath: CommandLine.arguments[1])
 let source = try String(contentsOf: repo.appendingPathComponent("config/BobTail.keymap"), encoding: .utf8)
 UserDefaults.standard.setVolatileDomain([
     "osSource": "mac", "keymapSourceKind": "folder", "keymapFolderPath": repo.path,
-    "scrollSmoothingEnabled": true, "scrollSpeed": 1.0, "scrollMomentum": 0.35, "scrollResponse": 0.024
+    "scrollSmoothingEnabled": true, "scrollSpeed": 1.0,
+    "scrollMomentum": ScrollPhysics.firmwareMomentum, "scrollResponse": 0.024
 ], forName: UserDefaults.argumentDomain)
 
 for enabled in [true, false] {
@@ -77,6 +78,19 @@ let wheel = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, w
 precondition(!scroll.handle(wheel)) // another device / unconfirmed wheel is untouched
 scroll.noteWheel(horizontal: true, ticks: 1)
 precondition(!scroll.handle(wheel)) // a receipt for another axis cannot capture it
+scroll.noteWheel(horizontal: false, ticks: 1)
+precondition(scroll.handle(wheel))
+// Losing one race must not poison every event after it. cancel() used to throw
+// the device evidence away along with the physics, so the report that would
+// have matched the next wheel event had just been deleted -- the next event
+// missed too, and nothing was ever smoothed again.
+scroll.cancel()
+scroll.noteWheel(horizontal: false, ticks: 1)
+precondition(scroll.handle(wheel))
+// The window server can also hand us the CGEvent before the HID report lands.
+// The event is still smoothed, and the late report settles the debt rather
+// than being counted a second time.
+precondition(scroll.handle(wheel))
 scroll.noteWheel(horizontal: false, ticks: 1)
 precondition(scroll.handle(wheel))
 scroll.cancel() // no tick was run, so this test posts no generated input

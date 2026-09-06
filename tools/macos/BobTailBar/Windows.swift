@@ -744,9 +744,9 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             slider.isContinuous = true
             slider.widthAnchor.constraint(equalToConstant: 240).isActive = true
         }
-        let hint = NSTextField(wrappingLabelWithString: "BobTail のトラックボールに速度と慣性を設定します。Mac のトラックパッドの動作には影響しません。慣性を 0% にすると指を止めた後の流れをなくせます。応答時間を短くすると動き始めが速く、長くするとなめらかになります。")
+        let hint = NSTextField(wrappingLabelWithString: "BobTail のトラックボールに速度と慣性を設定します。Mac のトラックパッドの動作には影響しません。慣性 50% がキーボード側で慣性を持っていた頃と同じ効きで、0% にすると指を止めた位置でぴたりと止まります。数目盛りの小さいスクロールはどの設定でも流れません。応答時間を短くすると動き始めが速く、長くするとなめらかになります。")
         hint.textColor = .secondaryLabelColor
-        let firmware = NSTextField(wrappingLabelWithString: "この調整には、キーボード側の慣性を無効にした新しい BobTail ファームウェアの書き込みが必要です。BobTailBar のアクセシビリティと入力監視の許可も有効にしてください。")
+        let firmware = NSTextField(wrappingLabelWithString: "この調整には、キーボード側の慣性を無効にした新しい BobTail ファームウェアの書き込みが必要です。またアクセシビリティと入力監視の両方の許可がいります（前者でホイールを差し替え、後者で「BobTail のホイールだ」と確認します）。どちらかが欠けていると、慣性は黙って効かなくなります。メニューの「キー監視」の行で今の状態を確認できます。")
         firmware.textColor = .secondaryLabelColor
         let reset = NSButton(title: "標準に戻す", target: self, action: #selector(resetScroll))
         let stack = NSStackView(views: [
@@ -931,14 +931,26 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     @objc private func resetScroll() {
         scrollBox.state = .on
         scrollSpeed.doubleValue = 1
-        scrollMomentum.doubleValue = 0.35
+        scrollMomentum.doubleValue = ScrollPhysics.firmwareMomentum
         scrollResponse.doubleValue = 24
         scrollChanged()
     }
 
     private func refreshScrollLabels() {
-        scrollSpeedLabel.stringValue = String(format: "%.2f 倍", scrollSpeed.doubleValue)
-        scrollMomentumLabel.stringValue = String(format: "%.0f%%", scrollMomentum.doubleValue * 100)
+        // つまみが何をしているのか数字で出す。慣性はファームウェアと同じ
+        // 「目盛り何個ぶん流れるか」で書く
+        let perTick = ScrollPhysics.basePixelsPerTick * scrollSpeed.doubleValue
+        scrollSpeedLabel.stringValue = String(format: "%.2f 倍（1 目盛り = %.0f px）", scrollSpeed.doubleValue, perTick)
+        let ticks = ScrollPhysics.coastTicks(momentum: scrollMomentum.doubleValue)
+        let firmware = abs(scrollMomentum.doubleValue - ScrollPhysics.firmwareMomentum) < 0.005
+        if ticks < 0.5 {
+            scrollMomentumLabel.stringValue = String(format: "%.0f%%（流れない）", scrollMomentum.doubleValue * 100)
+        } else {
+            scrollMomentumLabel.stringValue = String(
+                format: "%.0f%%（弾いた後 約 %.0f 目盛り = %.0f px 流れる）%@",
+                scrollMomentum.doubleValue * 100, ticks, ticks * perTick,
+                firmware ? " ← 以前のファームウェアと同じ" : "")
+        }
         scrollResponseLabel.stringValue = String(format: "%.0f ms", scrollResponse.doubleValue)
         let enabled = scrollBox.state == .on
         for slider in [scrollSpeed, scrollMomentum, scrollResponse] { slider.isEnabled = enabled }

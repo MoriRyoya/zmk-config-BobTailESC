@@ -568,12 +568,15 @@ final class EventTapMonitor {
         KeyboardState.shared.setGlobalTracking(hidOpen)
 
         let text: String
+        // スクロールの慣性は両方いる。CGEvent タップ（アクセシビリティ）で
+        // ホイールを差し替え、IOHID（入力監視）で「BobTail のホイールだ」と
+        // 確認する。片方でも欠けると黙って素通しになるので、ここで名指しする
         if hidOpen && tapLive {
             text = "キー監視: オン"
         } else if hidOpen {
-            text = "キー監視: オン（押しているキーの強調表示は他アプリでは効きません）"
+            text = "キー監視: オン（アクセシビリティが無いので、押しているキーの強調表示とスクロールの慣性は効きません）"
         } else if tapLive {
-            text = "キー監視: 不十分（入力監視が無く、他アプリではレイヤー表示が追従しません）"
+            text = "キー監視: 不十分（入力監視が無く、他アプリでのレイヤー表示とスクロールの慣性が効きません）"
         } else if Permissions.inputMonitoring {
             text = "キー監視: 再接続中…"
         } else {

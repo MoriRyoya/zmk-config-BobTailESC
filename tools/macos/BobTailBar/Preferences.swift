@@ -73,6 +73,10 @@ final class Preferences {
 
     private let defaults = UserDefaults.standard
 
+    private init() {
+        migrateScrollDefaultsIfNeeded()
+    }
+
     var tokens: [MenuBarToken] {
         get {
             if let data = defaults.data(forKey: "tokens"),
@@ -136,8 +140,9 @@ final class Preferences {
         get { bounded("scrollSpeed", fallback: 1, range: 0.25...3) }
         set { defaults.set(min(3, max(0.25, newValue)), forKey: "scrollSpeed"); ping() }
     }
+    /// 0.5 でファームウェア（CONFIG_PMW3610_SCROLL_MOMENTUM）と同じ効き。
     var scrollMomentum: Double {
-        get { bounded("scrollMomentum", fallback: 0.35, range: 0...1) }
+        get { bounded("scrollMomentum", fallback: ScrollPhysics.firmwareMomentum, range: 0...1) }
         set { defaults.set(min(1, max(0, newValue)), forKey: "scrollMomentum"); ping() }
     }
     var scrollResponse: Double {
@@ -147,6 +152,19 @@ final class Preferences {
     private func bounded(_ key: String, fallback: Double, range: ClosedRange<Double>) -> Double {
         guard let value = defaults.object(forKey: key) as? Double, value.isFinite else { return fallback }
         return min(range.upperBound, max(range.lowerBound, value))
+    }
+
+    /// スクロールの計算をピクセルから「目盛り」に組み直したので、前のエンジンに
+    /// 合わせて動かしたつまみの値は意味が変わってしまう（速度を下げると慣性まで
+    /// 消える、といった噛み合わせがあった）。一度だけ既定値に戻して、
+    /// ファームウェアと同じ効きから始められるようにする。
+    private func migrateScrollDefaultsIfNeeded() {
+        let key = "scrollDefaultsVersion"
+        guard defaults.integer(forKey: key) < 2 else { return }
+        for stale in ["scrollSpeed", "scrollMomentum", "scrollResponse"] {
+            defaults.removeObject(forKey: stale)
+        }
+        defaults.set(2, forKey: key)
     }
 
     /// keyboard = F19/F20 に追従。mac / win ならアプリ側で固定。
