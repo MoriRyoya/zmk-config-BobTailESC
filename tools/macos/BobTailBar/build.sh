@@ -33,7 +33,7 @@ if [[ -f AppIcon.png ]]; then
     cp AppIcon.png "${RESOURCES}/AppIcon.png"
 fi
 
-swiftc -O \
+swiftc -O -module-cache-path "${BUILD_DIR}/module-cache" \
     -framework AppKit \
     -framework CoreBluetooth \
     -framework CoreGraphics \
@@ -42,7 +42,7 @@ swiftc -O \
     -framework CoreServices \
     -framework Security \
     -o "${MACOS_DIR}/${APP_NAME}" \
-    main.swift Preferences.swift KeymapView.swift Windows.swift Gesture.swift KeymapSource.swift
+    main.swift Preferences.swift KeymapView.swift Windows.swift Gesture.swift KeymapSource.swift KeyCodes.swift BatteryReadings.swift OverlayGeometry.swift ScrollPhysics.swift Scroll.swift
 
 cat > "${APP_DIR}/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

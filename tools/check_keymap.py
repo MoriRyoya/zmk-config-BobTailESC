@@ -7,6 +7,7 @@ ZMK のビルドを回さずに、よくある事故を先に潰すためのス�
   - 波括弧 / 山括弧の対応が取れているか
   - キーマップ内で参照している behavior や macro が定義済みか
   - 引数が要る behavior を引数なしで置いていないか
+  - 独自 behavior の #binding-cells、エンコーダの空席、通知 ON/OFF の両構成
 
 行ごとのチェックが要る理由:
 合計だけ見ていると、ある行が 1 個多く隣の行が 1 個少ないケースを見逃す。
@@ -21,6 +22,7 @@ hold-tap の bindings に渡す形で、キーに直接置くとレイヤー番�
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -32,6 +34,8 @@ ROW_SHAPE = (10, 12, 12, 9)
 KEY_COUNT = sum(ROW_SHAPE)
 REPO = Path(__file__).resolve().parent.parent
 KEYMAP = REPO / "config" / "BobTail.keymap"
+LAYOUT = REPO / "config" / "BobTail.json"
+SHIELD = REPO / "config" / "boards" / "shields" / "Test" / "BobTail.dtsi"
 
 
 def preprocess(source: str) -> str:
@@ -66,6 +70,8 @@ def layer_blocks(text: str) -> list[tuple[str, str]]:
 
     [^{}] を挟むことで、直近に開いたノード名 (= レイヤー名) だけを拾う。
     """
+    if "keymap {" not in text:
+        return []
     body = text[text.index("keymap {"):]
     pattern = r"([\w-]+)\s*\{[^{}]*?bindings\s*=\s*<(.*?)>\s*;"
     return [match.groups() for match in re.finditer(pattern, body, re.S)]
@@ -92,14 +98,55 @@ def rows_of(bindings: str) -> list[list[str]]:
     ]
 
 
-def main() -> int:
-    source = KEYMAP.read_text()
-    text = preprocess(source)
+def validate_layout(metadata: dict, shield: str) -> list[str]:
+    """Editor と Studio の表示順・座標を突き合わせる。JSON row/col は配線ではない。"""
+    problems: list[str] = []
+    attrs = re.findall(r"<&key_physical_attrs\s+([\d\s-]+)>", shield)
+    physical = [tuple(map(int, entry.split())) for entry in attrs]
+    if len(physical) != KEY_COUNT:
+        problems.append(f"DTS physical-layout が {len(physical)} 個 (期待値 {KEY_COUNT})")
+    for name, layout in metadata.get("layouts", {}).items():
+        keys = layout.get("layout", [])
+        if len(keys) != KEY_COUNT:
+            problems.append(f"JSON {name} が {len(keys)} 個 (期待値 {KEY_COUNT})")
+        positions = [(key.get("row"), key.get("col")) for key in keys]
+        if len(set(positions)) != len(positions):
+            problems.append(f"JSON {name} の row/col に重複があります")
+        if any(not isinstance(v, int) for pair in positions for v in pair):
+            problems.append(f"JSON {name} の row/col は整数が必要です")
+        elif positions != sorted(positions):
+            problems.append(f"JSON {name} の row/col が bindings 順になっていません")
+        shape = tuple(sum(key.get("row") == row for key in keys) for row in range(4))
+        if shape != ROW_SHAPE:
+            problems.append(f"JSON {name} の論理行が {shape} (期待値 {ROW_SHAPE})")
+        for i, (key, attr) in enumerate(zip(keys, physical)):
+            if len(attr) != 7:
+                problems.append(f"DTS キー {i} の physical attrs が 7 個ではありません")
+                continue
+            expected = tuple(round(key.get(k, default) * 100) for k, default in (
+                ("w", 1), ("h", 1), ("x", 0), ("y", 0), ("r", 0), ("rx", 0), ("ry", 0)))
+            if attr != expected:
+                problems.append(f"キー {i} の JSON と DTS の表示座標が一致しません")
+    if not metadata.get("layouts"):
+        problems.append("JSON に layouts がありません")
+    return problems
 
+
+def validate(text: str) -> list[str]:
     problems: list[str] = []
 
     if text.count("{") != text.count("}"):
         problems.append(f"波括弧の数が合いません: {{ = {text.count('{')} / }} = {text.count('}')}")
+    if text.count("<") != text.count(">"):
+        problems.append(f"山括弧の数が合いません: < = {text.count('<')} / > = {text.count('>')}")
+
+    required_params = dict(MIN_PARAMS)
+    for match in re.finditer(
+        r"(\w+)\s*:\s*[\w-]+\s*\{[^{}]*?#binding-cells\s*=\s*<(\d+)>;",
+        text,
+        re.S,
+    ):
+        required_params[match[1]] = int(match[2])
 
     blocks = layer_blocks(text)
     if not blocks:
@@ -131,12 +178,14 @@ def main() -> int:
         # 引数が足りない behavior を置いていないか
         for position, binding in enumerate(token for row in rows for token in row):
             parts = binding.split()
-            need = MIN_PARAMS.get(parts[0].lstrip("&"))
+            need = required_params.get(parts[0].lstrip("&"))
             if need is not None and len(parts) - 1 < need:
                 problems.append(
                     f"レイヤー {name} のキー {position} が引数不足です: "
                     f"'{binding}' には引数が {need} 個要ります"
                 )
+            if position == 15 and binding != "&none":
+                problems.append(f"レイヤー {name} のエンコーダ位置 15 は &none が必要です")
 
         # レイヤー名を #define と同じ綴りにすると数値へ置換されて DTS が壊れる
         if name.isdigit():
@@ -159,10 +208,25 @@ def main() -> int:
         if label not in defined and label not in builtin:
             problems.append(f"未定義の behavior を参照しています: &{label}")
 
+    return problems
+
+
+def main() -> int:
+    source = KEYMAP.read_text()
+    problems = validate_layout(json.loads(LAYOUT.read_text()), SHIELD.read_text())
+    for enabled in (1, 0):
+        variant = re.sub(
+            r"(?m)^#define LAYER_INDICATOR\s+\d+\s*$",
+            f"#define LAYER_INDICATOR {enabled}",
+            source,
+        )
+        print(f"LAYER_INDICATOR={enabled}")
+        problems.extend(f"通知 {enabled}: {p}" for p in validate(preprocess(variant)))
+
     print()
+    for problem in problems:
+        print(f"NG: {problem}")
     if problems:
-        for problem in problems:
-            print(f"NG: {problem}")
         return 1
 
     print("問題は見つかりませんでした")

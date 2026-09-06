@@ -309,7 +309,7 @@
 <body>
   <header>
     <h1>BobTailESC キーマップ</h1>
-    <p class="lede">図面を CSS でトレースしています。上が長押し、下がタップ。Space / Enter / ⌫ / Fn をクリックすると、そのレイヤーへ飛びます。</p>
+    <p class="lede">図面を CSS でトレースしています。上が長押し、下がタップ。Space / かな / Gesture / Fn をクリックすると、そのレイヤーへ飛びます。</p>
   </header>
   <div class="toolbar">
     <div class="tabs" id="tabs"></div>
@@ -325,7 +325,7 @@
         <div class="hw" aria-hidden="true">
           <div class="case case-l"></div>
           <div class="case case-r"></div>
-          <div class="enc" title="エンコーダ"><div class="enc-slot"><div class="enc-wheel"></div></div></div>
+          <div class="enc" title="左エンコーダ: 時計回りで拡大、反時計回りで縮小 (全レイヤー)"><div class="enc-slot"><div class="enc-wheel"></div></div></div>
           <div class="tb" title="トラックボール">
             <div class="tb-hatch tb-hatch-l"></div>
             <div class="tb-ring"><div class="tb-sphere"></div></div>
@@ -359,35 +359,31 @@ const NO = { tap: "", hold: "", kind: "none", none: true };
 const BASE_MAC = [
   T("Q"), T("W"), T("E"), T("R"), T("T"),
   T("Y"), T("U"), T("I"), T("O"), T("P"),
-  H("A", "⌘", "mod"), H("S", "⌥", "mod"), H("D", "⌃", "mod"), H("F", "⇧", "mod"), T("G"),
+  T("A"), T("S"), T("D"), T("F"), T("G"),
   NO,
-  H("?", "Fn", "layer", { goto: "fn" }), T("H"), H("J", "⇧", "mod"), H("K", "⌃", "mod"), H("L", "⌥", "mod"), H(";", "⌘", "mod"),
+  T("?"), T("H"), T("J"), T("K"), T("L"), T(";"),
   T("Z"), T("X"), T("C"), T("V"), T("B"),
   T("-"),
   T("⌫"), T("N"), T("M"), T(","), T("."), T("/"),
-  T("Tab"), T("⌃", { kind: "mod" }), T("⌘", { kind: "mod" }),
+  T("⇧", { kind: "mod" }), T("⌃", { kind: "mod" }), T("⌘", { kind: "mod" }),
   H("", "Gesture", "layer", { goto: "gesture" }), H("英数", "L⌥", "ime"), H("Space", "Num", "layer", { goto: "num" }),
-  H("Enter", "Sym", "layer", { goto: "sym" }), H("かな", "R⌥", "ime"),
+  T("Enter"), H("かな", "Sym", "ime", { goto: "sym" }),
   H("", "Fn", "layer", { goto: "fn" }),
 ];
 
 const BASE_WIN = BASE_MAC.map((k, i) => ({
-  10: H("A", "Ctrl", "mod"),
-  12: H("D", "Win", "mod"),
-  19: H("K", "Win", "mod"),
-  21: H(";", "Ctrl", "mod"),
   35: T("Win", { kind: "mod" }),
   36: T("Ctrl", { kind: "mod" }),
 }[i] || k));
 
 const NUM_MAC = [
   T(".", { kind: "num" }), T("1", { kind: "num" }), T("2", { kind: "num" }), T("3", { kind: "num" }), T("+"),
-  T("行頭"), TR, T("↑"), TR, T("行末"),
+  T("行頭"), T("PgUp"), T("↑"), T("PgDn"), T("行末"),
   T("/", { kind: "num" }), T("4", { kind: "num" }), T("5", { kind: "num" }), T("6", { kind: "num" }), T("-"), NO,
-  T("{"), T("}"), T("←"), T("↓"), T("→"), TR,
-  TR, T("7", { kind: "num" }), T("8", { kind: "num" }), T("9", { kind: "num" }), T("="), T("*"),
-  T("("), T(")"), TR, T("単語←"), T("単語→"), T("\\"),
-  TR, TR, T("0", { kind: "num" }), TR, TR, TR, T("["), T("]"), TR,
+  T("{"), T("}"), T("←"), T("↓"), T("→"), T("Del"),
+  T("0", { kind: "num" }), T("7", { kind: "num" }), T("8", { kind: "num" }), T("9", { kind: "num" }), T("="), T("*"),
+  T("("), T(")"), T("Ins"), T("単語←"), T("単語→"), T("\\"),
+  TR, TR, TR, TR, TR, T("Space"), T("["), T("]"), TR,
 ];
 
 const NUM_WIN = NUM_MAC.map((k, i) => ({
@@ -399,29 +395,25 @@ const SYM = [
   T("^"), T("&"), T("*"), T("~"), T("?"),
   T("'"), T('"'), T("`"), T("|"), T("_"), NO, TR,
   T(":"), T(";"), T("<"), T(">"), T("+"),
-  NO, NO, NO, NO, NO, TR, T("Del"), NO, NO, NO, NO, NO,
+  T("Caps"), T("RAlt", { kind: "mod" }), NO, T("ScrLk"), T("Pause"), T("="), T("Del"), T("Home"), T("End"), T("PgUp"), T("PgDn"), T("\\"),
   TR, TR, TR, TR, TR, TR, TR, TR, TR,
 ];
 
 const GEST_MAC = [
   T("Esc"), TR, TR, TR, TR,
   T("範囲SS"), T("戻る"), T("Mission"), T("進む"), T("SS"),
-  TR, TR, TR, TR, TR, NO, TR,
+  T("Tab"), T("⇧Tab"), TR, TR, TR, NO, TR,
   T("窓切替"), T("Desk←"), T("Exposé"), T("Desk→"), T("アプリ"),
-  TR, TR, TR, TR, TR, TR, TR,
-  T("隠す"), T("最小化"), T("フルスク"), TR, TR,
-  TR, TR, TR, TR, TR, TR, TR, TR, TR,
+  TR, TR, T("CapsW"), TR, TR, TR, T("Del"),
+  T("隠す"), T("最小化"), T("フルスク"), T("文頭"), T("文末"),
+  TR, TR, TR, TR, TR, T("NumLk"), TR, TR, TR,
 ];
 
-const GEST_WIN = [
-  NO, TR, TR, TR, TR,
-  T("範囲SS"), T("戻る"), T("タスク"), T("進む"), T("PrtSc"),
-  TR, TR, TR, TR, TR, NO, TR,
-  TR, T("Desk←"), T("デスクトップ"), T("Desk→"), T("Alt+Tab"),
-  TR, TR, TR, TR, TR, TR, TR,
-  T("最小化"), T("最大化"), T("F11"), TR, TR,
-  TR, TR, TR, TR, TR, TR, TR, TR, TR,
-];
+const GEST_WIN = GEST_MAC.map((k, i) => ({
+  7: T("タスク"), 9: T("PrtSc"), 17: NO,
+  19: T("デスクトップ"), 21: T("Alt+Tab"),
+  29: T("最小化"), 30: T("最大化"), 31: T("F11"),
+}[i] || k));
 
 const FN = [
   T("BT0"), T("F1", { kind: "num" }), T("F2", { kind: "num" }), T("F3", { kind: "num" }), T("F10", { kind: "num" }),
@@ -442,12 +434,12 @@ const MOUSE = [
 ];
 
 const NOTES = {
-  base: "親指の内側4つが 英数 / Space / Enter / かな。英数・かなは長押しで L⌥ / R⌥。その左隣（旧英数）が Gesture。? はタップで ?、長押しで Fn。",
-  num: "左手テンキー。上段が 1 2 3、中段が 4 5 6、下段が 7 8 9。0 は ⌘ の位置。* は - の内側。括弧は {} がホーム、() がその下、[] が親指。",
-  fn: "F1–F9 は数字と同じ位置（1→F1）。F10 は + の列。BT0/BT1 は Q/A、BT2 は Z。Caps Word は ⌫ の位置。? 長押し、右下、または Space+Enter で出ます。最下行は使いません。",
-  sym: "Num に無い記号。* もここにあります。ここの ⌫ 位置も Delete です。",
-  gesture: "Gesture 押しながらボールをフリック。上=Mission Control、下=App Exposé、左右=デスクトップ切替。変換はキーボード本体で行うので、BobTailBar なしでも動きます。",
-  mouse: "ボール操作中のクリックはホーム段。中クリックはタップでクリック、長押しでスクロール。Gesture は旧英数の位置（この層でも同じキー）です。",
+  base: "英字・Enter・? は単機能。左下は専用 Shift / Ctrl / Command。英数は長押し L⌥、かなは長押し Sym。Space は打鍵後125ms以上間を置いて220ms保持すると Num。Fn は右下の専用キーです。",
+  num: "左手テンキー。上から 1 2 3 / 4 5 6 / 7 8 9。0 は Z、修飾キーはそのまま使えます。右手は逆T字の矢印、U/O は PgUp/PgDn、M は Insert。括弧は {} がホーム、() がその下、[] が親指。",
+  fn: "右下の専用 Fn を押します。F1–F9 は数字と同じ位置。F10/F11/F12 は +/−/= の列。BT0/BT1 は Q/A、BT2 は Z。Caps Word は ⌫ の位置です。",
+  sym: "かなを押しながら別キーを押すと即 Sym。Enter と ? に長押し機能はありません。上2段は記号、下段は Caps / RAlt / ScrollLock / Pause、Home / End / PgUp / PgDn。RAlt は AltGr を必要とする配列の予備です。",
+  gesture: "A が Tab、S が Shift+Tab、Q が Esc、C が Caps Word、⌫ が Delete、. / / が文頭 / 文末。Gesture+Space を押して両方離すと Num固定（再度で解除）。ボールのフリックは従来どおりです。",
+  mouse: "ボール操作でAMLを10秒維持。H/J/K/L/; は戻る/左/中/右/進む、それ以外を押すと解除。中クリック長押しでスクロール。BobTailBarの設定で慣性・速度・応答を調整できます。",
   scroll: "中クリック長押し中。ボールがスクロールになります。専用の Scroll キーはありません。",
 };
 
@@ -489,7 +481,8 @@ function keysFor(id) {
   if (id === "sym") return SYM;
   if (id === "gesture") return win ? GEST_WIN : GEST_MAC;
   if (id === "fn") return FN;
-  if (id === "mouse" || id === "scroll") return MOUSE;
+  if (id === "mouse") return MOUSE;
+  if (id === "scroll") return MOUSE.map((key, index) => [17, 18, 20, 21].includes(index) ? NO : key);
 }
 
 function render() {
@@ -516,6 +509,7 @@ function render() {
   const esc = KEY_BOXES[27];
   const space = KEY_BOXES[39];
   const encEl = document.querySelector(".enc");
+  if (encEl) encEl.title = `時計回り: ${os === "win" ? "Ctrl" : "⌘"}+=  /  反時計回り: ${os === "win" ? "Ctrl" : "⌘"}+- (全レイヤー)`;
   if (encEl && esc && space) {
     const gap = space.y - (esc.y + esc.h);
     place(encEl, { x: esc.x, y: esc.y - gap - esc.h, w: esc.w, h: esc.h });
@@ -535,7 +529,17 @@ function render() {
     const tapClass = tap.length >= 4 ? "tap long" : "tap";
     const title = [key.hold, tap].filter(Boolean).join(" / ");
     if (title) div.title = title;
-    div.innerHTML = `<div class="face"><div class="hold">${key.hold || ""}</div><div class="${tapClass}">${tap}</div></div>`;
+    const face = document.createElement("div");
+    face.className = "face";
+    const holdEl = document.createElement("div");
+    holdEl.className = "hold";
+    holdEl.textContent = key.hold || "";
+    const tapEl = document.createElement("div");
+    tapEl.className = tapClass;
+    tapEl.textContent = tap;
+    face.appendChild(holdEl);
+    face.appendChild(tapEl);
+    div.appendChild(face);
     if (key.goto) {
       div.style.cursor = "pointer";
       div.addEventListener("click", () => { current = key.goto; render(); });

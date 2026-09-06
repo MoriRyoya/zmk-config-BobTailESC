@@ -374,8 +374,8 @@ final class KeymapHUDView: NSView {
 
     /// つかんで動かせる帯の高さ
     static let headerHeight: CGFloat = 30
-    /// 右下のサイズ変更グリップ
-    static let gripSize: CGFloat = 18
+    /// 四隅のサイズ変更グリップ（クリック透過中も掴める）
+    static let gripSize: CGFloat = 20
 
     private var layerTitle = ""
     private var layerBadge = ""
@@ -420,12 +420,19 @@ final class KeymapHUDView: NSView {
 
     /// 帯の上か（クリック透過中でもここだけは掴めるようにする）
     func isInHeader(_ point: NSPoint) -> Bool {
-        point.y <= Self.headerHeight
+        bounds.contains(point) && point.y <= Self.headerHeight
     }
 
-    /// 右下のサイズ変更グリップの上か
+    func resizeCorner(at point: NSPoint) -> OverlayResizeCorner? {
+        guard bounds.contains(point) else { return nil }
+        return OverlayResizeCorner.allCases.first {
+            $0.gripRect(in: bounds, size: Self.gripSize).contains(point)
+        }
+    }
+
+    /// 四隅のサイズ変更グリップの上か
     func isInGrip(_ point: NSPoint) -> Bool {
-        point.x >= bounds.maxX - Self.gripSize && point.y >= bounds.maxY - Self.gripSize
+        resizeCorner(at: point) != nil
     }
 
     /// 追従できていない警告文の上か。ここだけは帯のドラッグより優先して
@@ -439,8 +446,8 @@ final class KeymapHUDView: NSView {
     var onDragBegin: ((NSPoint) -> Void)?
     var onDragMove: ((NSPoint) -> Void)?
     var onDragEnd: (() -> Void)?
-    var onResizeBegin: ((NSPoint) -> Void)?
-    var onResizeMove: ((NSPoint) -> Void)?
+    var onResizeBegin: ((NSPoint, OverlayResizeCorner) -> Void)?
+    var onResizeMove: ((NSPoint, Bool) -> Void)?
     var onResizeEnd: (() -> Void)?
     /// 警告文をクリックしたとき。ドラッグに変わらずタップで終わった場合だけ呼ぶ。
     var onWarningTap: (() -> Void)?
@@ -454,6 +461,13 @@ final class KeymapHUDView: NSView {
     /// パネルは非アクティブのままなので、最初のクリックから受け取れるようにする
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        // 下側のグリップは board と重なる。子ビューへ渡さず必ず HUD で掴む。
+        if isInHeader(local) || isInGrip(local) { return self }
+        return super.hitTest(point)
+    }
+
     override func resetCursorRects() {
         super.resetCursorRects()
         addCursorRect(NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight),
@@ -461,9 +475,9 @@ final class KeymapHUDView: NSView {
         if !warningText.isEmpty {
             addCursorRect(warningRect, cursor: .pointingHand)
         }
-        addCursorRect(NSRect(x: bounds.maxX - Self.gripSize, y: bounds.maxY - Self.gripSize,
-                             width: Self.gripSize, height: Self.gripSize),
-                      cursor: .crosshair)
+        for corner in OverlayResizeCorner.allCases {
+            addCursorRect(corner.gripRect(in: bounds, size: Self.gripSize), cursor: .crosshair)
+        }
     }
 
     private func screenPoint(_ event: NSEvent) -> NSPoint {
@@ -473,9 +487,9 @@ final class KeymapHUDView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let local = convert(event.locationInWindow, from: nil)
-        if isInGrip(local) {
+        if let corner = resizeCorner(at: local) {
             grab = .resize
-            onResizeBegin?(screenPoint(event))
+            onResizeBegin?(screenPoint(event), corner)
         } else if isInWarning(local) {
             // すぐドラッグにはせず、動かないまま離されたらタップとして扱う。
             // 帯のどこでも掴めるようにしてある都合上、警告文の上も本来は
@@ -494,7 +508,9 @@ final class KeymapHUDView: NSView {
     override func mouseDragged(with event: NSEvent) {
         switch grab {
         case .move: onDragMove?(screenPoint(event))
-        case .resize: onResizeMove?(screenPoint(event))
+        case .resize:
+            let preserveRatio = !event.modifierFlags.intersection([.shift, .command]).isEmpty
+            onResizeMove?(screenPoint(event), preserveRatio)
         case .warningPending:
             let local = convert(event.locationInWindow, from: nil)
             guard let start = warningDownLocal else { break }
@@ -524,7 +540,7 @@ final class KeymapHUDView: NSView {
         // 見出しの帯
         let header = NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight)
         let badgeSide: CGFloat = 18
-        let badgeRect = NSRect(x: 12, y: (Self.headerHeight - badgeSide) / 2,
+        let badgeRect = NSRect(x: Self.gripSize + 2, y: (Self.headerHeight - badgeSide) / 2,
                                width: max(badgeSide, 30), height: badgeSide)
         let layerColor = Preferences.shared.layerActiveColor
         let badgePath = NSBezierPath(roundedRect: badgeRect, xRadius: 5, yRadius: 5)
@@ -543,7 +559,7 @@ final class KeymapHUDView: NSView {
             ? palette.plateFaint
             : NSColor.systemRed.blended(withFraction: 0.15, of: palette.plateText) ?? .systemRed
         let rightRect = NSRect(x: badgeRect.maxX + 200, y: 0,
-                               width: max(60, header.width - badgeRect.maxX - 212),
+                               width: max(60, header.width - badgeRect.maxX - 224),
                                height: Self.headerHeight)
         // クリック判定は draw() のたびに引き直す。テキストの位置とズレないようにするため
         warningRect = warningText.isEmpty ? .zero : rightRect
@@ -559,14 +575,19 @@ final class KeymapHUDView: NSView {
     }
 
     private func drawGrip(palette: KeymapPalette) {
-        let corner = NSPoint(x: bounds.maxX - 6, y: bounds.maxY - 6)
         palette.plateFaint.withAlphaComponent(0.45).setStroke()
-        for offset in stride(from: CGFloat(3), through: CGFloat(9), by: 3) {
-            let path = NSBezierPath()
-            path.move(to: NSPoint(x: corner.x - offset, y: corner.y))
-            path.line(to: NSPoint(x: corner.x, y: corner.y - offset))
-            path.lineWidth = 1
-            path.stroke()
+        for corner in OverlayResizeCorner.allCases {
+            let x = corner.isLeft ? bounds.minX + 6 : bounds.maxX - 6
+            let y = corner.isTop ? bounds.minY + 6 : bounds.maxY - 6
+            let inwardX: CGFloat = corner.isLeft ? 1 : -1
+            let inwardY: CGFloat = corner.isTop ? 1 : -1
+            for offset in stride(from: CGFloat(3), through: CGFloat(9), by: 3) {
+                let path = NSBezierPath()
+                path.move(to: NSPoint(x: x + inwardX * offset, y: y))
+                path.line(to: NSPoint(x: x, y: y + inwardY * offset))
+                path.lineWidth = 1
+                path.stroke()
+            }
         }
     }
 

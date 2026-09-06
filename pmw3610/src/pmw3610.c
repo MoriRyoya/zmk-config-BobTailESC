@@ -24,6 +24,7 @@
 #include <zmk/events/position_state_changed.h>
 #include <zmk/events/layer_state_changed.h>
 #include "pmw3610.h"
+#include "scroll_quantize.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
@@ -958,33 +959,37 @@ static int pmw3610_report_data(const struct device *dev) {
                 const int32_t tick = CONFIG_PMW3610_SCROLL_TICK;
                 /* Vertical wins on any near-tie. Horizontal needs ~4x dominance
                    and a larger absolute move so diagonal noise never locks X. */
-                if (ay > tick && ay * 2 >= ax) {
+                if (ay >= tick && ay * 2 >= ax) {
                     data->scroll_axis_lock = 1;
                     data->scroll_delta_x = 0;
-                } else if (ax > tick * 2 && ax > ay * 4) {
+                } else if (ax >= tick * 2 && ax > ay * 4) {
                     data->scroll_axis_lock = 2;
                     data->scroll_delta_y = 0;
                 }
             }
 
-            if (data->scroll_axis_lock == 1 &&
-                abs(data->scroll_delta_y) > CONFIG_PMW3610_SCROLL_TICK) {
-                const int8_t wheel = data->scroll_delta_y > 0 ? PMW3610_SCROLL_Y_NEGATIVE
-                                                             : PMW3610_SCROLL_Y_POSITIVE;
-                input_report_rel(dev, INPUT_REL_WHEEL, wheel, true, K_FOREVER);
-                data->scroll_delta_y = 0;
+            if (data->scroll_axis_lock == 1) {
+                const int32_t steps = bobtail_scroll_take_ticks(&data->scroll_delta_y,
+                                                               CONFIG_PMW3610_SCROLL_TICK);
+                if (steps != 0) {
+                    const int8_t wheel = steps > 0 ? steps * PMW3610_SCROLL_Y_NEGATIVE
+                                                   : -steps * PMW3610_SCROLL_Y_POSITIVE;
+                    input_report_rel(dev, INPUT_REL_WHEEL, wheel, true, K_FOREVER);
 #ifdef CONFIG_PMW3610_SCROLL_MOMENTUM
-                scroll_momentum_note_tick(data, INPUT_REL_WHEEL, wheel);
+                    scroll_momentum_note_tick(data, INPUT_REL_WHEEL, wheel > 0 ? 1 : -1);
 #endif
-            } else if (data->scroll_axis_lock == 2 &&
-                       abs(data->scroll_delta_x) > CONFIG_PMW3610_SCROLL_TICK) {
-                const int8_t hwheel = data->scroll_delta_x > 0 ? PMW3610_SCROLL_X_NEGATIVE
-                                                              : PMW3610_SCROLL_X_POSITIVE;
-                input_report_rel(dev, INPUT_REL_HWHEEL, hwheel, true, K_FOREVER);
-                data->scroll_delta_x = 0;
+                }
+            } else if (data->scroll_axis_lock == 2) {
+                const int32_t steps = bobtail_scroll_take_ticks(&data->scroll_delta_x,
+                                                               CONFIG_PMW3610_SCROLL_TICK);
+                if (steps != 0) {
+                    const int8_t wheel = steps > 0 ? steps * PMW3610_SCROLL_X_NEGATIVE
+                                                   : -steps * PMW3610_SCROLL_X_POSITIVE;
+                    input_report_rel(dev, INPUT_REL_HWHEEL, wheel, true, K_FOREVER);
 #ifdef CONFIG_PMW3610_SCROLL_MOMENTUM
-                scroll_momentum_note_tick(data, INPUT_REL_HWHEEL, hwheel);
+                    scroll_momentum_note_tick(data, INPUT_REL_HWHEEL, wheel > 0 ? 1 : -1);
 #endif
+                }
             }
 
             k_timer_start(&scroll_unlock_timer, K_MSEC(CONFIG_PMW3610_SCROLL_LOCK_IDLE_MS),

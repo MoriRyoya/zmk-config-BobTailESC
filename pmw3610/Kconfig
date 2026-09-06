@@ -40,6 +40,7 @@ config PMW3610_SNIPE_CPI_DIVIDOR
 config PMW3610_SCROLL_TICK
 	int "PMW3610's required ticks to produce a scroll report"
 	default 20
+	range 1 1000
 
 config PMW3610_SCROLL_LOCK_IDLE_MS
 	int "Release scroll axis lock after this much idle time"

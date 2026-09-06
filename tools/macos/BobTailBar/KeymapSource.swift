@@ -9,6 +9,8 @@ struct OverlayKey: Codable, Equatable {
     var trans: Bool
     var none: Bool
     var goto: String?
+    var output: String? = nil
+    var holdOutput: String? = nil
 
     static let transKey = OverlayKey(tap: "↓", hold: "", kind: "trans", trans: true, none: false, goto: nil)
     static let noneKey = OverlayKey(tap: "", hold: "", kind: "none", trans: false, none: true, goto: nil)
@@ -32,6 +34,7 @@ struct OverlayLayer: Codable, Equatable {
 struct OverlayPayload: Codable, Equatable {
     var layers: [OverlayLayer]
     var source: String
+    var rawLayers: [String: [OverlayKey]]? = nil
 }
 
 /// ローカルフォルダまたは GitHub の `.keymap` を読み、オーバーレイへ反映する。
@@ -47,6 +50,7 @@ final class KeymapSource {
     private var githubETag: String?
     private var githubResolvedRef: String?
     private var githubTask: URLSessionDataTask?
+    private var githubGeneration = UUID()
     private let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 20
@@ -206,6 +210,7 @@ final class KeymapSource {
     private func stopPolling() {
         pollTimer?.invalidate()
         pollTimer = nil
+        githubGeneration = UUID()
         githubTask?.cancel()
         githubTask = nil
     }
@@ -295,9 +300,12 @@ final class KeymapSource {
 
     private func startGitHubRequest(_ request: URLRequest, target: GitHubTarget, allowPrivateHint: Bool) {
         githubTask?.cancel()
+        let generation = UUID()
+        githubGeneration = generation
         githubTask = session.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
-                self?.handleGitHubResponse(
+                guard let self, self.kind == "github", self.githubGeneration == generation else { return }
+                self.handleGitHubResponse(
                     target: target,
                     data: data,
                     response: response as? HTTPURLResponse,
@@ -341,12 +349,12 @@ final class KeymapSource {
             apply(payload: payload, status: "GitHub: 取得に失敗しました (\(code))")
             return
         }
-        githubETag = response?.value(forHTTPHeaderField: "ETag")
         let source = "GitHub \(target.label)"
         guard let parsed = Self.parse(text: raw, folder: nil, source: source) else {
             apply(payload: payload, status: "GitHub: キーマップを解析できません")
             return
         }
+        githubETag = response?.value(forHTTPHeaderField: "ETag")
         apply(payload: parsed, status: source)
     }
 
@@ -481,7 +489,7 @@ final class KeymapSource {
 
     // MARK: - Parser
 
-    private static func parse(text: String?, folder: URL?, source: String? = nil) -> OverlayPayload? {
+    static func parse(text: String?, folder: URL?, source: String? = nil) -> OverlayPayload? {
         let raw: String
         var label = source ?? "キーマップ"
         if let text {
@@ -514,6 +522,7 @@ final class KeymapSource {
             ("sym", parsed["sym"]?.name ?? "Sym"),
             ("gesture", parsed["gesture"]?.name ?? "Gesture"),
             ("mouse", parsed["mouse"]?.name ?? "Mouse"),
+            ("scroll", parsed["scroll"]?.name ?? "Scroll"),
         ]
         var layersOut: [OverlayLayer] = []
         for (id, fallbackName) in ordered {
@@ -530,7 +539,7 @@ final class KeymapSource {
                 layersOut.append(OverlayLayer(id: id, name: name, mac: keys, win: keys))
             }
         }
-        return OverlayPayload(layers: layersOut, source: label)
+        return OverlayPayload(layers: layersOut, source: label, rawLayers: parsed.mapValues { $0.keys })
     }
 
     private static func merge(_ base: [OverlayKey], _ overlay: [OverlayKey]) -> [OverlayKey] {
@@ -596,9 +605,13 @@ final class KeymapSource {
 
     private static func applyDefines(_ line: String, defines: [String: String]) -> String {
         var result = line
-        for key in defines.keys.sorted(by: { $0.count > $1.count }) {
-            guard let value = defines[key] else { continue }
-            result = replaceWord(result, word: key, with: value)
+        for _ in 0..<12 {
+            let previous = result
+            for key in defines.keys.sorted(by: { $0.count > $1.count }) {
+                guard let value = defines[key] else { continue }
+                result = replaceWord(result, word: key, with: value)
+            }
+            if result == previous { break }
         }
         return result
     }
@@ -662,7 +675,9 @@ final class KeymapSource {
             let name = ns.substring(with: match.range(at: 2))
             let bindings = ns.substring(with: match.range(at: 3))
             let id = layerId(node: node, name: name)
-            result[id] = ParsedLayer(name: name, keys: pad(parseBindings(bindings)))
+            let keys = parseBindings(bindings)
+            guard keys.count == 43 else { return }
+            result[id] = ParsedLayer(name: name, keys: pad(keys))
         }
         return result
     }
@@ -737,7 +752,7 @@ final class KeymapSource {
             return 0
         case "kp", "mkp", "mo", "to", "tog", "out", "msc", "mmv", "bt":
             return 1
-        case "hml", "hmr", "lt_num", "lt_sym", "lt_fn", "lt_gest", "lt_scrl", "ime_mod":
+        case "hml", "hmr", "lt_num", "lt_sym", "lt_fn", "lt_gest", "lt_scrl", "ime_mod", "mt", "lt":
             return 2
         default:
             return 0
@@ -745,6 +760,19 @@ final class KeymapSource {
     }
 
     private static func overlayKey(behavior: String, args: [String]) -> OverlayKey {
+        var key = renderedKey(behavior: behavior, args: args)
+        switch behavior {
+        case "kp", "mkp": key.output = args.first
+        case "hml", "hmr", "ime_mod", "mt":
+            key.output = args.last
+            key.holdOutput = args.first
+        case "lt_num", "lt_sym", "lt_fn", "lt_gest", "lt_scrl", "lt": key.output = args.last
+        default: break
+        }
+        return key
+    }
+
+    private static func renderedKey(behavior: String, args: [String]) -> OverlayKey {
         switch behavior {
         case "trans":
             return .transKey
@@ -754,7 +782,7 @@ final class KeymapSource {
             return .tap(label(args.first ?? ""), kind: kindForKey(args.first ?? ""))
         case "mkp":
             return .tap(label(args.first ?? ""), kind: "")
-        case "hml", "hmr":
+        case "hml", "hmr", "mt":
             return .hold(label(args.last ?? ""), label(args.first ?? ""), kind: "mod")
         case "lt_num":
             return .hold(label(args.last ?? "Space"), "Num", kind: "layer", goto: "num")
@@ -770,9 +798,13 @@ final class KeymapSource {
             return .hold(label(args.last ?? ""), label(args.first ?? ""), kind: "ime")
         case "ind_fn":
             return .hold("", "Fn", kind: "layer", goto: "fn")
-        case "mo":
-            if args.first == "FN" || args.first == "9" {
-                return .hold("", "Fn", kind: "layer", goto: "fn")
+        case "mo", "lt":
+            let layers = ["0": "base", "1": "mouse", "2": "scroll", "4": "num", "5": "sym", "6": "gesture", "9": "fn",
+                          "BASE": "base", "MOUSE": "mouse", "SCRL": "scroll", "NUM": "num", "SYM": "sym", "GEST": "gesture", "FN": "fn"]
+            if let target = layers[args.first ?? ""] {
+                let titles = ["base": "Base", "mouse": "Mouse", "scroll": "Scroll", "num": "Num", "sym": "Sym", "gesture": "Gesture", "fn": "Fn"]
+                return .hold(behavior == "lt" ? label(args.last ?? "") : "", titles[target] ?? target,
+                             kind: "layer", goto: target)
             }
             return .tap(label(args.first ?? ""))
         case "ind_gest":
@@ -826,7 +858,8 @@ final class KeymapSource {
         return ""
     }
 
-    private static func label(_ code: String) -> String {
+    static func label(_ expression: String) -> String {
+        let code = KeyCodes.canonical(expression)
         let table: [String: String] = [
             "Q": "Q", "W": "W", "E": "E", "R": "R", "T": "T", "Y": "Y", "U": "U", "I": "I", "O": "O", "P": "P",
             "A": "A", "S": "S", "D": "D", "F": "F", "G": "G", "H": "H", "J": "J", "K": "K", "L": "L",
@@ -859,7 +892,17 @@ final class KeymapSource {
             "LC(LG(LEFT))": "Desk←", "LC(LG(RIGHT))": "Desk→", "LG(D)": "デスクトップ",
             "LA(TAB)": "Alt+Tab",
         ]
-        return table[code] ?? code
+        if let known = table[code] { return known }
+        let extra = ["PG_UP": "PgUp", "PG_DN": "PgDn", "INS": "Ins", "CAPS": "Caps",
+                     "SLCK": "ScrLk", "PAUSE_BREAK": "Pause", "C_STOP": "停止"]
+        if let known = extra[code] { return known }
+        if let open = code.firstIndex(of: "("), code.hasSuffix(")") {
+            let symbols = ["LS": "⇧", "RS": "⇧", "LC": "⌃", "RC": "⌃", "LA": "⌥", "RA": "⌥", "LG": "⌘", "RG": "⌘"]
+            if let symbol = symbols[String(code[..<open])] {
+                return symbol + label(String(code[code.index(after: open)..<code.index(before: code.endIndex)]))
+            }
+        }
+        return code
     }
 }
 
@@ -869,9 +912,9 @@ final class KeymapSource {
 /// KeyboardState の layerId（base / num / fn / sym / gesture / scroll）から
 /// 実際に描く 43 キーを取り出す。
 enum KeymapLayers {
-    /// スクロール中はマウス層の配列を出す。専用のレイヤー定義は無い。
+    /// The source contains both Mouse and Scroll layers.
     private static func payloadId(for layerId: String) -> String {
-        layerId == "scroll" ? "mouse" : layerId
+        layerId
     }
 
     static func layer(id: String) -> OverlayLayer? {
@@ -889,6 +932,31 @@ enum KeymapLayers {
         var padded = keys
         while padded.count < KeymapGeometry.keyCount { padded.append(.noneKey) }
         return Array(padded.prefix(KeymapGeometry.keyCount))
+    }
+
+    static func resolvedKeys(layerId: String, os: String, activeLayers: [String] = []) -> [OverlayKey] {
+        let requested = activeLayers.isEmpty ? (layerId == "scroll" ? ["mouse", "scroll"] : [layerId]) : activeLayers
+        if let raw = KeymapSource.shared.payload?.rawLayers, var resolved = raw["base"] {
+            var active = Set(requested)
+            if os == "Windows" {
+                active.insert("win")
+                if active.contains("num") { active.insert("numw") }
+                if active.contains("gesture") { active.insert("gestw") }
+            }
+            // Preserve transparent entries in conditional layers. Pre-merging Num+Win
+            // before Sym would incorrectly cover Sym with the lower Num bindings.
+            for id in ["mouse", "scroll", "win", "num", "sym", "gesture", "numw", "gestw", "fn"] where active.contains(id) {
+                if let overlay = raw[id] {
+                    resolved = zip(resolved, overlay).map { $1.trans ? $0 : $1 }
+                }
+            }
+            return resolved
+        }
+        var resolved = keys(layerId: "base", os: os)
+        for id in requested {
+            resolved = zip(resolved, keys(layerId: id, os: os)).map { $1.trans ? $0 : $1 }
+        }
+        return resolved
     }
 
     static func title(layerId: String) -> String {

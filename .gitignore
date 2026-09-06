@@ -3,3 +3,7 @@ tools/macos/BobTailBar/build/
 # ローカルのビルド / 署名ログ。手元の絶対パスが混ざるので追跡しない
 tools/macos/BobTailBar/.build-out.txt
 tools/macos/BobTailBar/.sign-check.txt
+
+# Python validation cache
+__pycache__/
+*.pyc

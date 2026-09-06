@@ -128,6 +128,27 @@ final class Preferences {
         set { defaults.set(newValue, forKey: "gestureCooldown"); ping() }
     }
 
+    var scrollSmoothingEnabled: Bool {
+        get { defaults.object(forKey: "scrollSmoothingEnabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "scrollSmoothingEnabled"); ping() }
+    }
+    var scrollSpeed: Double {
+        get { bounded("scrollSpeed", fallback: 1, range: 0.25...3) }
+        set { defaults.set(min(3, max(0.25, newValue)), forKey: "scrollSpeed"); ping() }
+    }
+    var scrollMomentum: Double {
+        get { bounded("scrollMomentum", fallback: 0.35, range: 0...1) }
+        set { defaults.set(min(1, max(0, newValue)), forKey: "scrollMomentum"); ping() }
+    }
+    var scrollResponse: Double {
+        get { bounded("scrollResponse", fallback: 0.024, range: 0.01...0.08) }
+        set { defaults.set(min(0.08, max(0.01, newValue)), forKey: "scrollResponse"); ping() }
+    }
+    private func bounded(_ key: String, fallback: Double, range: ClosedRange<Double>) -> Double {
+        guard let value = defaults.object(forKey: key) as? Double, value.isFinite else { return fallback }
+        return min(range.upperBound, max(range.lowerBound, value))
+    }
+
     /// keyboard = F19/F20 に追従。mac / win ならアプリ側で固定。
     var osSource: String {
         get { defaults.string(forKey: "osSource") ?? "keyboard" }

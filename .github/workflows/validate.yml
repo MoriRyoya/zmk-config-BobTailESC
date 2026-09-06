@@ -1,0 +1,17 @@
+name: Validate keymap and BobTail Bar
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  keymap-and-firmware-helpers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/check_keymap.py
+      - run: python3 -m unittest discover -s tools -p 'test_*.py' -v
+
+  macos-app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tools/macos/test.sh

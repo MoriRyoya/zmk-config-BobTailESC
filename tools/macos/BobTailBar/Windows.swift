@@ -11,16 +11,37 @@ private final class HUDPanel: NSPanel {
 
 /// 角丸とすりガラスの下地。中身は KeymapHUDView が描く。
 private final class HUDBackgroundView: NSVisualEffectView {
+    private static let cornerRadius: CGFloat = 14
+    private static let roundedMask: NSImage = {
+        let radius = cornerRadius
+        let image = NSImage(size: NSSize(width: radius * 2 + 1, height: radius * 2 + 1),
+                            flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
+    }()
+
     override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        // behindWindow のぼかしは layer.cornerRadius だけでは切り抜かれず、
+        // 白い背景で四角い下地が残る。素材自体にも同じ角丸マスクを渡す。
+        maskImage = Self.roundedMask
         wantsLayer = true
-        layer?.cornerRadius = 14
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.cornerRadius = Self.cornerRadius
         layer?.masksToBounds = true
-        if #available(macOS 10.15, *) {
-            layer?.cornerCurve = .continuous
-        }
+    }
+
+    override func layout() {
+        super.layout()
+        window?.invalidateShadow()
     }
 }
 
@@ -38,7 +59,8 @@ final class KeymapOverlayController: NSWindowController {
     private var dragOrigin: NSPoint?
     private var dragStartFrame: NSRect?
     private var resizeOrigin: NSPoint?
-    private var resizeStartSize: NSSize?
+    private var resizeStartFrame: NSRect?
+    private var resizeCorner: OverlayResizeCorner?
 
     private var contentSize: NSSize { Preferences.shared.keymapOverlayPixelSize }
 
@@ -86,8 +108,10 @@ final class KeymapOverlayController: NSWindowController {
         hud.onDragBegin = { [weak self] point in self?.beginDrag(at: point) }
         hud.onDragMove = { [weak self] point in self?.continueDrag(to: point) }
         hud.onDragEnd = { [weak self] in self?.endDrag() }
-        hud.onResizeBegin = { [weak self] point in self?.beginResize(at: point) }
-        hud.onResizeMove = { [weak self] point in self?.continueResize(to: point) }
+        hud.onResizeBegin = { [weak self] point, corner in self?.beginResize(at: point, corner: corner) }
+        hud.onResizeMove = { [weak self] point, preserveRatio in
+            self?.continueResize(to: point, preservingAspectRatio: preserveRatio)
+        }
         hud.onResizeEnd = { [weak self] in self?.endResize() }
         // 他アプリで作業中でも読めるのはここだけなので、赤い警告はメニューを
         // 開かなくても直接クリックで足りない許可の設定パネルへ飛べるようにする
@@ -129,12 +153,13 @@ final class KeymapOverlayController: NSWindowController {
             return
         }
         panel.orderFrontRegardless()
+        updateClickThrough()
     }
 
     /// レイヤーと配列を描画側へ渡す
     func pushState() {
         let state = KeyboardState.shared
-        hud.board.keys = KeymapLayers.keys(layerId: state.layerId, os: state.effectiveOS)
+        hud.board.keys = KeymapLayers.resolvedKeys(layerId: state.layerId, os: state.effectiveOS, activeLayers: state.activeLayerIDs)
         hud.update(
             layerTitle: KeymapLayers.title(layerId: state.layerId),
             badge: state.layerBadge,
@@ -167,6 +192,7 @@ final class KeymapOverlayController: NSWindowController {
 
     private func applyStyle() {
         panel.alphaValue = CGFloat(Preferences.shared.keymapOverlayOpacity)
+        updateClickThrough()
     }
 
     func place(at corner: String) {
@@ -269,7 +295,7 @@ final class KeymapOverlayController: NSWindowController {
         panel.ignoresMouseEvents = !grabbable
     }
 
-    // MARK: ドラッグで移動 / 右下で大きさ変更
+    // MARK: ドラッグで移動 / 四隅で大きさ変更
 
     private func beginDrag(at screenPoint: NSPoint) {
         dragOrigin = screenPoint
@@ -287,32 +313,33 @@ final class KeymapOverlayController: NSWindowController {
     private func endDrag() {
         dragOrigin = nil
         dragStartFrame = nil
+        updateClickThrough()
     }
 
-    private func beginResize(at screenPoint: NSPoint) {
+    private func beginResize(at screenPoint: NSPoint, corner: OverlayResizeCorner) {
         resizeOrigin = screenPoint
-        resizeStartSize = panel.frame.size
+        resizeStartFrame = panel.frame
+        resizeCorner = corner
     }
 
-    private func continueResize(to screenPoint: NSPoint) {
-        guard let resizeOrigin, let resizeStartSize else { return }
-        let width = resizeStartSize.width + (screenPoint.x - resizeOrigin.x)
-        let height = resizeStartSize.height - (screenPoint.y - resizeOrigin.y)
-        let clamped = NSSize(
-            width: min(1400, max(420, width.rounded())),
-            height: min(900, max(180, height.rounded()))
+    private func continueResize(to screenPoint: NSPoint, preservingAspectRatio: Bool) {
+        guard let resizeOrigin, let resizeStartFrame, let resizeCorner else { return }
+        let frame = OverlayResizeGeometry.frame(
+            from: resizeStartFrame,
+            delta: NSSize(width: screenPoint.x - resizeOrigin.x, height: screenPoint.y - resizeOrigin.y),
+            corner: resizeCorner,
+            preservingAspectRatio: preservingAspectRatio
         )
-        var frame = panel.frame
-        frame.origin.y = frame.maxY - clamped.height
-        frame.size = clamped
         panel.setFrame(frame, display: true)
     }
 
     private func endResize() {
         guard resizeOrigin != nil else { return }
         resizeOrigin = nil
-        resizeStartSize = nil
+        resizeStartFrame = nil
+        resizeCorner = nil
         Preferences.shared.keymapOverlayPixelSize = panel.frame.size
+        updateClickThrough()
     }
 }
 
@@ -336,6 +363,13 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     private let cooldown = NSSlider()
     private let thresholdLabel = NSTextField(labelWithString: "")
     private let cooldownLabel = NSTextField(labelWithString: "")
+    private let scrollBox = NSButton(checkboxWithTitle: "BobTail のスクロールをなめらかにする", target: nil, action: nil)
+    private let scrollSpeed = NSSlider()
+    private let scrollMomentum = NSSlider()
+    private let scrollResponse = NSSlider()
+    private let scrollSpeedLabel = NSTextField(labelWithString: "")
+    private let scrollMomentumLabel = NSTextField(labelWithString: "")
+    private let scrollResponseLabel = NSTextField(labelWithString: "")
     private let loginBox = NSButton(checkboxWithTitle: "ログイン時に起動する", target: nil, action: nil)
     private let keymapCaption = NSTextField(labelWithString: "")
     private let keymapPreview = KeymapBoardView()
@@ -399,6 +433,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         tabs.addTabViewItem(tab("キーボード", view: keyboardTab()))
         tabs.addTabViewItem(tab("キーマップ", view: keymapTab()))
         tabs.addTabViewItem(tab("ジェスチャ", view: gestureTab()))
+        tabs.addTabViewItem(tab("スクロール", view: scrollTab()))
         tabs.addTabViewItem(tab("一般", view: generalTab()))
         return tabs
     }
@@ -533,7 +568,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         overlayScale.minValue = 0.55
         overlayScale.maxValue = 1.7
         overlayScale.target = self
-        overlayScale.action = #selector(overlayChanged)
+        overlayScale.action = #selector(overlayScaleChanged)
         let scaleRow = labeled("大きさ", overlayScale)
 
         let titles = ["左下", "右下", "左上", "右上"]
@@ -547,7 +582,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         placeRow.orientation = NSUserInterfaceLayoutOrientation.horizontal
         placeRow.spacing = 8
 
-        let overlayHint = NSTextField(wrappingLabelWithString: "位置はボタンか上バーのドラッグ、大きさは四隅をドラッグして変えられます。クリック透過中でも角と上バーだけ掴めます。")
+        let overlayHint = NSTextField(wrappingLabelWithString: "位置はボタンか上バーのドラッグ、大きさは四隅をドラッグして変えられます。Shift または ⌘ を押しながら角をドラッグすると縦横比を保ちます。クリック透過中でも角と上バーだけ掴めます。")
         overlayHint.textColor = .secondaryLabelColor
 
         keymapCaption.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
@@ -691,6 +726,41 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             cooldown.widthAnchor.constraint(equalToConstant: 240),
         ])
         return wrap
+    }
+
+    private func scrollTab() -> NSView {
+        scrollBox.target = self
+        scrollBox.action = #selector(scrollChanged)
+        scrollSpeed.minValue = 0.25
+        scrollSpeed.maxValue = 3
+        scrollMomentum.minValue = 0
+        scrollMomentum.maxValue = 1
+        // 表示・操作は ms、保存は秒。
+        scrollResponse.minValue = 10
+        scrollResponse.maxValue = 80
+        for slider in [scrollSpeed, scrollMomentum, scrollResponse] {
+            slider.target = self
+            slider.action = #selector(scrollChanged)
+            slider.isContinuous = true
+            slider.widthAnchor.constraint(equalToConstant: 240).isActive = true
+        }
+        let hint = NSTextField(wrappingLabelWithString: "BobTail のトラックボールに速度と慣性を設定します。Mac のトラックパッドの動作には影響しません。慣性を 0% にすると指を止めた後の流れをなくせます。応答時間を短くすると動き始めが速く、長くするとなめらかになります。")
+        hint.textColor = .secondaryLabelColor
+        let firmware = NSTextField(wrappingLabelWithString: "この調整には、キーボード側の慣性を無効にした新しい BobTail ファームウェアの書き込みが必要です。BobTailBar のアクセシビリティと入力監視の許可も有効にしてください。")
+        firmware.textColor = .secondaryLabelColor
+        let reset = NSButton(title: "標準に戻す", target: self, action: #selector(resetScroll))
+        let stack = NSStackView(views: [
+            scrollBox, hint,
+            labeled("速度", scrollSpeed), scrollSpeedLabel,
+            labeled("慣性", scrollMomentum), scrollMomentumLabel,
+            labeled("応答時間", scrollResponse), scrollResponseLabel,
+            reset, firmware,
+        ])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
+        stretch([hint, firmware], to: stack)
+        return scrollable(stack)
     }
 
     private func generalTab() -> NSView {
@@ -844,6 +914,39 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         prefs.keymapHighlightPressed = highlightBox.state == .on
         pressedColorWell.isEnabled = prefs.keymapHighlightPressed
         prefs.keymapOverlayOpacity = 1 - opacity.doubleValue
+        refreshLabels()
+        AppWindows.shared.syncKeymap()
+    }
+
+    @objc private func scrollChanged() {
+        guard !isReloading else { return }
+        let prefs = Preferences.shared
+        prefs.scrollSmoothingEnabled = scrollBox.state == .on
+        prefs.scrollSpeed = scrollSpeed.doubleValue
+        prefs.scrollMomentum = scrollMomentum.doubleValue
+        prefs.scrollResponse = scrollResponse.doubleValue / 1000
+        refreshScrollLabels()
+    }
+
+    @objc private func resetScroll() {
+        scrollBox.state = .on
+        scrollSpeed.doubleValue = 1
+        scrollMomentum.doubleValue = 0.35
+        scrollResponse.doubleValue = 24
+        scrollChanged()
+    }
+
+    private func refreshScrollLabels() {
+        scrollSpeedLabel.stringValue = String(format: "%.2f 倍", scrollSpeed.doubleValue)
+        scrollMomentumLabel.stringValue = String(format: "%.0f%%", scrollMomentum.doubleValue * 100)
+        scrollResponseLabel.stringValue = String(format: "%.0f ms", scrollResponse.doubleValue)
+        let enabled = scrollBox.state == .on
+        for slider in [scrollSpeed, scrollMomentum, scrollResponse] { slider.isEnabled = enabled }
+    }
+
+    @objc private func overlayScaleChanged() {
+        guard !isReloading else { return }
+        let prefs = Preferences.shared
         let scale = overlayScale.doubleValue
         prefs.keymapOverlayScale = scale
         prefs.keymapOverlayPixelSize = NSSize(
@@ -970,7 +1073,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     func pushKeymap() {
         let state = KeyboardState.shared
         keymapCaption.stringValue = "いまのレイヤー: \(state.layerName)（\(state.effectiveOS)）"
-        keymapPreview.keys = KeymapLayers.keys(layerId: state.layerId, os: state.effectiveOS)
+        keymapPreview.keys = KeymapLayers.resolvedKeys(layerId: state.layerId, os: state.effectiveOS, activeLayers: state.activeLayerIDs)
         var previewPressed = Set(state.layerIndicatorIndices)
         if Preferences.shared.keymapHighlightPressed {
             previewPressed.formUnion(state.typedIndices)
@@ -996,6 +1099,10 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         gestureBox.state = prefs.gestureEnabled ? .on : .off
         threshold.doubleValue = prefs.gestureThreshold
         cooldown.doubleValue = prefs.gestureCooldown
+        scrollBox.state = prefs.scrollSmoothingEnabled ? .on : .off
+        scrollSpeed.doubleValue = prefs.scrollSpeed
+        scrollMomentum.doubleValue = prefs.scrollMomentum
+        scrollResponse.doubleValue = prefs.scrollResponse * 1000
         loginBox.state = prefs.launchAtLogin ? .on : .off
         overlayBox.state = prefs.keymapOverlayEnabled ? .on : .off
         clickThroughBox.state = prefs.keymapOverlayClickThrough ? .on : .off
@@ -1028,6 +1135,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         preview.stringValue = "プレビュー　" + Preferences.shared.composeMenubar(state: KeyboardState.shared)
         thresholdLabel.stringValue = String(format: "%.0f px", threshold.doubleValue)
         cooldownLabel.stringValue = String(format: "%.2f 秒", cooldown.doubleValue)
+        refreshScrollLabels()
         opacityLabel.stringValue = "\(Int((opacity.doubleValue * 100).rounded()))%"
         overlayScaleLabel.stringValue = "\(Int((overlayScale.doubleValue * 100).rounded()))%"
     }

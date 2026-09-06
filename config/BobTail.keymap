@@ -9,13 +9,14 @@
  *  34  35  36  37  38  39             40  41    (ball)    42
  *              ~~~~~~~~~~~~~~~~       ~~~~~~
  *              打ちやすい親指 4+Gesture     右親指 2 個
- *              (34/35/36 は押しづらいのでレイヤーでは使わない。?/42 が Fn)
+ *              (34/35/36 は専用 Shift/Ctrl/Command。42 が専用 Fn)
  *
  * 設計方針
  *   - 15 番はエンコーダなので割り当てない (bindings 上は &none)
  *   - 対になるキーは左右対称 (英数↔かな, Space↔Enter, -↔⌫)
  *   - 内側列は下段のほうが打ちやすいので、使用頻度の高いものを下へ
- *   - 英数(LANG2) / かな(LANG1) は独立キー。長押しは LALT / RALT。トグル・コンボは使わない
+ *   - 英字・Enter・? に長押し機能を置かない。修飾キーの誤発動を構造的に防ぐ
+ *   - 英数(LANG2) は長押し LALT、かな(LANG1) は長押し SYM。重複した右 Alt は補助層へ
  *   - 数字は左手テンキー。右手はトラックボールに置いたまま数値を打てる
  *   - 同じ層の右手に逆Ｔ字の矢印と、対になった括弧を置く
  *   - F キーは数字と同一位置 (7 の上が F7)。形で覚える
@@ -104,51 +105,28 @@
 
 #endif
 
-#define KEYS_L  0  1  2  3  4 10 11 12 13 14 22 23 24 25 26 27 34 35 36
-#define KEYS_R  5  6  7  8  9 16 17 18 19 20 21 28 29 30 31 32 33 42
-#define KEYS_T 37 38 39 40 41
-
 / {
     behaviors {
-        hml: homerow_mod_left {
-            compatible = "zmk,behavior-hold-tap";
-            #binding-cells = <2>;
-            flavor = "balanced";
-            tapping-term-ms = <220>;
-            quick-tap-ms = <175>;
-            require-prior-idle-ms = <130>;
-            hold-trigger-key-positions = <KEYS_R KEYS_T>;
-            hold-trigger-on-release;
-            bindings = <&kp>, <&kp>;
-        };
-
-        hmr: homerow_mod_right {
-            compatible = "zmk,behavior-hold-tap";
-            #binding-cells = <2>;
-            flavor = "balanced";
-            tapping-term-ms = <220>;
-            quick-tap-ms = <175>;
-            require-prior-idle-ms = <130>;
-            hold-trigger-key-positions = <KEYS_L KEYS_T>;
-            hold-trigger-on-release;
-            bindings = <&kp>, <&kp>;
-        };
-
+        /* Space は文章中で頻繁に重なるので、後続キーだけで Num を発動しない。
+           直前の文字から 125 ms 以内なら即 Space。数字入力は少し間を置いて
+           220 ms 保持する。連続 Space は quick-tap でリピートできる。 */
         lt_num: layer_tap_num {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
-            flavor = "balanced";
-            tapping-term-ms = <200>;
+            flavor = "tap-preferred";
+            tapping-term-ms = <220>;
             quick-tap-ms = <175>;
+            require-prior-idle-ms = <125>;
             bindings = <HOLD_NUM>, <&kp>;
         };
 
+        /* かな: 別キーを押した時点で Sym。Enter の誤送信リスクを持たせない。
+           IME 操作直後でも意図した hold が使えるよう quick-tap / prior-idle は設けない。 */
         lt_sym: layer_tap_sym {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
-            flavor = "balanced";
-            tapping-term-ms = <200>;
-            quick-tap-ms = <175>;
+            flavor = "hold-preferred";
+            tapping-term-ms = <180>;
             bindings = <HOLD_SYM>, <&kp>;
         };
 
@@ -165,42 +143,31 @@
             bindings = <HOLD_SCRL>, <&mkp>;
         };
 
-        lt_gest: layer_tap_gesture {
-            compatible = "zmk,behavior-hold-tap";
-            #binding-cells = <2>;
-            flavor = "balanced";
-            tapping-term-ms = <200>;
-            quick-tap-ms = <175>;
-            bindings = <HOLD_GEST>, <&kp>;
-        };
-
-        /* ?: タップで ?、長押しで Fn */
-
-        lt_fn: layer_tap_fn {
-            compatible = "zmk,behavior-hold-tap";
-            #binding-cells = <2>;
-            flavor = "balanced";
-            tapping-term-ms = <200>;
-            quick-tap-ms = <175>;
-            bindings = <HOLD_FN>, <&kp>;
-        };
-
-        /* 英数 / かな: タップで IME、長押しで LALT / RALT */
+        /* 英数: 別キーの押下で直ちに LALT。単独保持では 180 ms。
+           hold-while-undecided は IME タップのたびに Alt を送るため使用しない。 */
 
         ime_mod: ime_mod_tap {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
-            flavor = "balanced";
-            tapping-term-ms = <200>;
-            quick-tap-ms = <175>;
+            flavor = "hold-preferred";
+            tapping-term-ms = <180>;
             bindings = <&kp>, <&kp>;
         };
 
-        enc_scroll: encoder_scroll {
+        /* 全層の左エンコーダは拡大 / 縮小。CW が拡大、CCW が縮小。
+           Base と Win だけに sensor-bindings を定義し、他層は未定義のまま
+           OS 層へフォールバックする (&trans はセンサー用 API を持たない)。 */
+        enc_zoom_mac: encoder_zoom_mac {
             compatible = "zmk,behavior-sensor-rotate";
             #sensor-binding-cells = <0>;
-            bindings = <&msc SCRL_UP>, <&msc SCRL_DOWN>;
+            bindings = <&kp LG(EQUAL)>, <&kp LG(MINUS)>;
+            tap-ms = <20>;
+        };
 
+        enc_zoom_win: encoder_zoom_win {
+            compatible = "zmk,behavior-sensor-rotate";
+            #sensor-binding-cells = <0>;
+            bindings = <&kp LC(EQUAL)>, <&kp LC(MINUS)>;
             tap-ms = <20>;
         };
     };
@@ -338,10 +305,6 @@
             then-layer = <GESTW>;
         };
 
-        cond_fn {
-            if-layers = <NUM SYM>;
-            then-layer = <FN>;
-        };
     };
 
     keymap {
@@ -350,25 +313,24 @@
         /* ============================================================
          * 0: BASE
          *
-         *  親指の内側 4 キー (打ちやすい):  英数/L⌥  Space  |  Enter  かな/R⌥
+         *  親指の内側 4 キー (打ちやすい):  英数/L⌥  Space/Num  |  Enter  かな/Sym
          *  そのすぐ外側: Gesture (旧英数の位置)
          *
          *  Q     W     E     R     T   |   Y     U     I     O     P
-         *  A/⌘  S/⌥  D/⌃  F/⇧   G  enc|  ?/Fn H   J/⇧ K/⌃ L/⌥  ;/⌘
+         *  A     S     D     F     G  enc|  ?    H     J     K     L     ;
          *  Z     X     C     V     B   - |  ⌫    N     M     ,     .     /
-         * Tab   ⌃    ⌘   GES  英数/⌥  Spc| Ent  かな/⌥                    Fn
+         *  ⇧    ⌃    ⌘   GES  英数/⌥  Spc| Ent  かな/Sym                  Fn
          * ============================================================ */
 
         base_layer {
             display-name = "Base";
             bindings = <
 &kp Q        &kp W        &kp E               &kp R                &kp T                                                                &kp Y  &kp U         &kp I         &kp O        &kp P
-&hml LGUI A  &hml LALT S  &hml LCTRL D        &hml LSHFT F         &kp G              &none                  &lt_fn FN QMARK            &kp H  &hmr RSHFT J  &hmr RCTRL K  &hmr RALT L  &hmr RGUI SEMI
+&kp A        &kp S        &kp D               &kp F                &kp G              &none                  &kp QMARK                  &kp H  &kp J         &kp K         &kp L        &kp SEMI
 &kp Z        &kp X        &kp C               &kp V                &kp B              &kp MINUS              &kp BSPC                   &kp N  &kp M         &kp COMMA     &kp DOT      &kp SLASH
-&kp TAB      &kp LCTRL    &kp LGUI            MO_GEST              &ime_mod LALT LANG2  &lt_num NUM SPACE      &lt_sym SYM ENTER          &ime_mod RALT LANG1                              MO_FN
+&kp LSHFT    &kp LCTRL    &kp LGUI            MO_GEST              &ime_mod LALT LANG2  &lt_num NUM SPACE      &kp ENTER                  &lt_sym SYM LANG1                                MO_FN
             >;
-
-            sensor-bindings = <&enc_scroll>;
+            sensor-bindings = <&enc_zoom_mac>;
         };
 
         mouse_layer {
@@ -377,10 +339,8 @@
 &trans  &trans  &trans            &trans  &trans                      &trans    &trans    &trans             &trans    &trans
 &trans  &trans  &trans            &trans  &trans  &none       &trans  &mkp MB4  &mkp MB1  &lt_scrl SCRL MB3  &mkp MB2  &mkp MB5
 &trans  &trans  &trans            &trans  &trans  &trans      &trans  &trans    &trans    &trans             &trans    &trans
-&trans  &trans  &trans  MO_GEST  &trans  &trans  &trans      &trans  &trans
+&trans  &trans  &trans  &trans   &trans  &trans  &trans      &trans  &trans
             >;
-
-            sensor-bindings = <&enc_scroll>;
         };
 
         /* ボールをスクロールにする内部層。専用キーは無い。中クリック長押しで乗る。
@@ -395,47 +355,42 @@
 &trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans                          &trans
             >;
-
-            sensor-bindings = <&enc_scroll>;
         };
 
         win_layer {
             display-name = "Win";
             bindings = <
 &trans        &trans    &trans       &trans  &trans                      &trans  &trans  &trans       &trans  &trans
-&hml LCTRL A  &trans    &hml LGUI D  &trans  &trans  &none       &trans  &trans  &trans  &hmr RGUI K  &trans  &hmr RCTRL SEMI
+&trans        &trans    &trans       &trans  &trans  &none       &trans  &trans  &trans  &trans       &trans  &trans
 &trans        &trans    &trans       &trans  &trans  &trans      &trans  &trans  &trans  &trans       &trans  &trans
 &trans        &kp LGUI  &kp LCTRL    &trans  &trans  &trans      &trans  &trans                               &trans
             >;
-
-            sensor-bindings = <&enc_scroll>;
+            sensor-bindings = <&enc_zoom_win>;
         };
 
         /* ============================================================
          * 4: NUM — Space 長押し。左手がテンキー、右手が矢印と括弧
          *
-         *   .   1   2   3   +   |  行頭        ↑         行末
-         *   /   4   5   6   -  enc|  {    }    ←    ↓    →
-         *       7   8   9   =   * |  (    )       単語← 単語→  \
-         *           0             |  [    ]
+         *   .   1   2   3   +   |  行頭 PgUp  ↑  PgDn 行末
+         *   /   4   5   6   -  enc|  {    }    ←    ↓    →   Del
+         *   0   7   8   9   =   * |  (    )   Ins 単語← 単語→  \
+         *                         |  [    ]
          *
-         * 最下行の外側 (Tab/⌃/⌘) は使わない。0 は ⌘ の位置
+         * 0 は Z。最下行の Shift/Ctrl/Command を透過にして選択・ショートカットを維持。
          * ============================================================ */
 
         num_layer {
             display-name = "Num+Nav";
             bindings = <
-&kp DOT    &kp N1  &kp N2  &kp N3  &kp PLUS                                           &kp LG(LEFT)           &trans    &kp UP        &trans         &kp LG(RIGHT)
-&kp SLASH  &kp N4  &kp N5  &kp N6  &kp MINUS  &none             &kp LEFT_BRACE        &kp RIGHT_BRACE        &kp LEFT  &kp DOWN      &kp RIGHT      &trans
-&trans     &kp N7  &kp N8  &kp N9  &kp EQUAL  &kp ASTERISK      &kp LEFT_PARENTHESIS  &kp RIGHT_PARENTHESIS  &trans    &kp LA(LEFT)  &kp LA(RIGHT)  &kp BSLH
-&trans     &trans  &kp N0  &trans  &trans     &trans            &kp LEFT_BRACKET      &kp RIGHT_BRACKET                                             &trans
+&kp DOT    &kp N1  &kp N2  &kp N3  &kp PLUS                                           &kp LG(LEFT)           &kp PG_UP  &kp UP        &kp PG_DN      &kp LG(RIGHT)
+&kp SLASH  &kp N4  &kp N5  &kp N6  &kp MINUS  &none             &kp LEFT_BRACE        &kp RIGHT_BRACE        &kp LEFT   &kp DOWN      &kp RIGHT      &kp DEL
+&kp N0     &kp N7  &kp N8  &kp N9  &kp EQUAL  &kp ASTERISK      &kp LEFT_PARENTHESIS  &kp RIGHT_PARENTHESIS  &kp INS    &kp LA(LEFT)  &kp LA(RIGHT)  &kp BSLH
+&trans     &trans  &trans  &trans  &trans     &kp SPACE         &kp LEFT_BRACKET      &kp RIGHT_BRACKET                                              &trans
             >;
-
-            sensor-bindings = <&inc_dec_kp LC(LS(TAB)) LC(TAB)>;
         };
 
         /* ============================================================
-         * 5: SYM — Enter 長押し。Num 層に無い記号
+         * 5: SYM — かな長押し。Num 層に無い記号 + 低頻度の編集・互換キー
          * ============================================================ */
 
         sym_layer {
@@ -443,23 +398,19 @@
             bindings = <
 &kp EXCL  &kp AT   &kp HASH   &kp DLLR  &kp PRCNT                       &kp CARET  &kp AMPS  &kp ASTRK  &kp TILDE  &kp QMARK
 &kp SQT   &kp DQT  &kp GRAVE  &kp PIPE  &kp UNDER  &none       &trans   &kp COLON  &kp SEMI  &kp LT     &kp GT     &kp PLUS
-&none     &none    &none      &none     &none      &trans      &kp DEL  &none      &none     &none      &none      &none
+&kp CAPS  &kp RALT  &none     &kp SLCK  &kp PAUSE_BREAK  &kp EQUAL  &kp DEL  &kp HOME  &kp END  &kp PG_UP  &kp PG_DN  &kp BSLH
 &trans    &trans   &trans     &trans    &trans     &trans      &trans   &trans                                     &trans
             >;
-
-            sensor-bindings = <&enc_scroll>;
         };
 
         gest_layer {
             display-name = "Gesture";
             bindings = <
 &kp ESC  &trans  &trans  &trans  &trans                      &kp LG(LS(N4))  &kp LG(LBKT)  &kp LC(UP)     &kp LG(RBKT)   &kp LG(LS(N5))
-&trans   &trans  &trans  &trans  &trans  &none       &trans  &kp LG(GRAVE)   &kp LC(LEFT)  &kp LC(DOWN)   &kp LC(RIGHT)  &kp LG(TAB)
-&trans   &trans  &trans  &trans  &trans  &trans      &trans  &kp LG(H)       &kp LG(M)     &kp LC(LG(F))  &trans         &trans
-&trans   &trans  &trans  &trans  &trans  &trans      &trans  &trans                                                      &trans
+&kp TAB  &kp LS(TAB)  &trans  &trans  &trans  &none  &trans  &kp LG(GRAVE)   &kp LC(LEFT)  &kp LC(DOWN)   &kp LC(RIGHT)  &kp LG(TAB)
+&trans   &trans  &caps_word  &trans  &trans  &trans  &kp DEL  &kp LG(H)       &kp LG(M)     &kp LC(LG(F))  &kp LG(UP)     &kp LG(DOWN)
+&trans   &trans  &trans  &trans  &trans  TOG_NUM     &trans  &trans                                                      &trans
             >;
-
-            sensor-bindings = <&enc_scroll>;
         };
 
         /* Windows 時: 行頭行末・単語移動だけ差し替え。括弧と数字はそのまま */
@@ -472,8 +423,6 @@
 &trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans    &trans  &kp LC(LEFT)  &kp LC(RIGHT)  &trans
 &trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans                                         &trans
             >;
-
-            sensor-bindings = <&inc_dec_kp LC(LS(TAB)) LC(TAB)>;
         };
 
         gestw_layer {
@@ -481,16 +430,14 @@
             bindings = <
 &trans  &trans  &trans  &trans  &trans                      &kp LG(LS(S))  &kp LA(LEFT)      &kp LG(TAB)  &kp LA(RIGHT)      &kp PSCRN
 &trans  &trans  &trans  &trans  &trans  &none       &trans  &none          &kp LC(LG(LEFT))  &kp LG(D)    &kp LC(LG(RIGHT))  &kp LA(TAB)
-&trans  &trans  &trans  &trans  &trans  &trans      &trans  &kp LG(DOWN)   &kp LG(UP)        &kp F11      &trans             &trans
+&trans  &trans  &trans  &trans  &trans  &trans      &trans  &kp LG(DOWN)   &kp LG(UP)        &kp F11      &kp LC(HOME)       &kp LC(END)
 &trans  &trans  &trans  &trans  &trans  &trans      &trans  &trans                                                           &trans
             >;
-
-            sensor-bindings = <&enc_scroll>;
         };
 
         /* ============================================================
-         * 9: FN — ? 長押し、右下 42、または Space+Enter。
-         *    数字と同一位置に F1–F9。F12/F11/F10 は +/−/= の列で上ほど大きい
+         * 9: FN — 専用の右下 42。文字キーや Enter と兼用しない。
+         *    数字と同一位置に F1–F9。F10/F11/F12 は +/−/= の列で下ほど大きい
          *
          *  BT0  F1  F2  F3  F10 | 輝度- 輝度+ 前曲  再生  次曲
          *  BT1  F4  F5  F6  F11 | ミュート 音量- 音量+ PrtSc NumLk
@@ -505,8 +452,6 @@
 &bt BT_SEL 2  &kp F7  &kp F8  &kp F9  &kp F12  &trans             &caps_word  OS_MAC      OS_WIN        &out OUT_TOG  &bt BT_CLR   &bootloader
 &trans        &trans  &trans  &trans  &trans   &trans             &trans      &trans                                               &trans
             >;
-
-            sensor-bindings = <&inc_dec_kp C_VOL_DN C_VOL_UP>;
         };
     };
 };

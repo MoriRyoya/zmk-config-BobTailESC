@@ -32,13 +32,14 @@ enum IndicatorKey {
     // pressedCodes に載る値と絶対に衝突しないようにしてある
     static let num: Int64 = 1001
     static let sym: Int64 = 1002
-    static let scroll: Int64 = 114  // 内部 ID（旧 Help の仮想キーコード。F22 は CGEvent にならない）
+    static let scroll: Int64 = 1008 // Keep real macOS Help/Insert (114) available.
     static let gesture: Int64 = 1003
     static let fn: Int64 = 1004
     static let macMode: Int64 = 1005
     static let winMode: Int64 = 1006
+    static let mouse: Int64 = 1007
 
-    static let all: Set<Int64> = [num, sym, scroll, gesture, fn, macMode, winMode]
+    static let all: Set<Int64> = [num, sym, scroll, gesture, fn, macMode, winMode, mouse]
 
     /// USB HID usage（Keyboard page か Consumer page）→ 内部 ID
     static func fromHIDUsage(page: UInt32, usage: UInt32) -> Int64? {
@@ -50,6 +51,7 @@ enum IndicatorKey {
             case 0x01D3: return fn
             case 0x01D4: return macMode
             case 0x01D5: return winMode
+            case 0x01D6: return mouse
             default: return nil
             }
         }
@@ -71,102 +73,36 @@ enum ArrowKey {
     static let up: CGKeyCode = 126
 }
 
-/// macOS 仮想キーコード → キーマップ上の物理位置
+/// Loaded bindings are the sole source of key positions, including GitHub edits.
 enum KeyHighlight {
-    /// いま保持しているレイヤーの「入り口」キー。強調表示のオン / オフに関係なく、
-    /// レイヤーバッジと同じ意味の常時表示として使う
     static func layerIndices(held: Set<Int64>) -> [Int] {
-        var out = Set<Int>()
-        if held.contains(IndicatorKey.num) { out.insert(39) }
-        if held.contains(IndicatorKey.sym) { out.insert(40) }
-        if held.contains(IndicatorKey.gesture) { out.insert(37) }
-        if held.contains(IndicatorKey.fn) { out.insert(16) }
-        if held.contains(IndicatorKey.scroll) { out.insert(19) }
-        return out.sorted()
-    }
-
-    /// レイヤーの入り口キー以外で、実際にいま押しているキー。
-    /// 「押しているキーを強調表示する」トグルの対象
-    static func typedIndices(codes: Set<Int64>, layer: String) -> [Int] {
-        var out = Set<Int>()
-        for code in codes {
-            for index in map(code, layer: layer) { out.insert(index) }
+        let targets: [Int64: String] = [IndicatorKey.num: "num", IndicatorKey.sym: "sym",
+            IndicatorKey.gesture: "gesture", IndicatorKey.fn: "fn", IndicatorKey.scroll: "scroll"]
+        let wanted = Set(held.compactMap { targets[$0] })
+        let state = KeyboardState.shared
+        let base = KeymapLayers.keys(layerId: "base", os: state.effectiveOS)
+        let mouse = KeymapLayers.keys(layerId: "mouse", os: state.effectiveOS)
+        return base.indices.filter { index in
+            (base[index].goto.map { wanted.contains($0) } ?? false) ||
+            (wanted.contains("scroll") && mouse[index].goto == "scroll")
         }
-        return out.sorted()
     }
 
-    private static func map(_ code: Int64, layer: String) -> [Int] {
-        switch layer {
-        case "num":
-            if let found = num[code] { return found }
-        case "fn":
-            if let found = fn[code] { return found }
-        case "sym":
-            if let found = sym[code] { return found }
-        default:
-            break
+    static func indices(code: Int64, flags: CGEventFlags, keys: [OverlayKey]) -> [Int] {
+        var matches: [(Int, Int)] = []
+        for (index, key) in keys.enumerated() where !key.none {
+            for expression in [key.output, key.holdOutput].compactMap({ $0 }) {
+                guard let chord = KeyCodes.chord(expression), chord.code == code,
+                      flags.intersection(chord.modifiers) == chord.modifiers else { continue }
+                matches.append((index, chord.modifiers.rawValue.nonzeroBitCount))
+            }
         }
-        return base[code] ?? []
+        guard let specificity = matches.map({ $0.1 }).max() else { return [] }
+        let best = Set(matches.filter { $0.1 == specificity }.map { $0.0 })
+        // HID reports outputs, not switch positions. Identical chords cannot be distinguished;
+        // leave an ambiguous match unlit rather than claim multiple switches are held.
+        return best.count == 1 ? best.sorted() : []
     }
-
-    /// A=0 … など ANSI / JIS
-    private static let base: [Int64: [Int]] = [
-        12: [0], 13: [1], 14: [2], 15: [3], 17: [4],
-        16: [5], 32: [6], 34: [7], 31: [8], 35: [9],
-        0: [10], 1: [11], 2: [12], 3: [13], 5: [14],
-        4: [17], 38: [18], 40: [19], 37: [20], 41: [21],
-        6: [22], 7: [23], 8: [24], 9: [25], 11: [26],
-        53: [27], 51: [28],
-        45: [29], 46: [30], 43: [31], 47: [32], 44: [33],
-        48: [34],
-        59: [12, 35], 62: [19],
-        55: [10, 36], 54: [21],
-        56: [13], 60: [18],
-        58: [11, 38], 61: [20, 41],
-        102: [38], 104: [41],
-        49: [39], 36: [40],
-    ]
-
-    private static let num: [Int64: [Int]] = [
-        47: [0], 65: [0],
-        26: [1], 89: [1],
-        28: [2], 91: [2],
-        25: [3], 92: [3],
-        24: [4], 69: [4],
-        75: [10], 44: [10],
-        21: [11], 86: [11],
-        23: [12], 87: [12],
-        22: [13], 88: [13],
-        27: [14], 78: [14],
-        123: [18],
-        125: [19],
-        124: [20],
-        29: [22], 82: [22],
-        18: [23], 83: [23],
-        19: [24], 84: [24],
-        20: [25], 85: [25],
-        81: [26],
-        117: [28], 51: [28],
-        33: [29],
-        30: [30],
-        42: [33],
-        126: [7],
-    ]
-
-    private static let fn: [Int64: [Int]] = [
-        122: [1], 120: [2], 99: [3], 109: [4],
-        118: [11], 96: [12], 97: [13], 103: [14],
-        98: [23], 100: [24], 101: [25], 111: [26],
-        71: [21],
-    ]
-
-    private static let sym: [Int64: [Int]] = [
-        18: [0], 19: [1], 20: [2], 21: [3], 23: [4],
-        22: [5], 26: [6], 28: [7], 50: [8, 12], 44: [9],
-        39: [10, 11], 42: [13], 27: [14],
-        41: [17, 18], 43: [19], 47: [20], 24: [21],
-        117: [28], 51: [28],
-    ]
 }
 
 // MARK: - 権限
@@ -235,6 +171,7 @@ final class KeyboardState {
 
     private(set) var held = Set<Int64>()
     private(set) var pressedCodes = Set<Int64>()
+    private var pressedPositions: [Int64: [Int]] = [:]
     private(set) var osMode = "macOS"
     var leftBattery: Int?
     var rightBattery: Int?
@@ -262,8 +199,19 @@ final class KeyboardState {
         case "記号": return "sym"
         case "テンキー": return "num"
         case "スクロール": return "scroll"
+        case "マウス": return "mouse"
         default: return "base"
         }
+    }
+
+    /// Actual layer stack, including Windows conditional layers above Sym.
+    var activeLayerIDs: [String] {
+        let ordinary: [(Int64, String)] = [(IndicatorKey.mouse, "mouse"), (IndicatorKey.scroll, "scroll")]
+        let middle: [(Int64, String)] = effectiveOS == "Windows"
+            ? [(IndicatorKey.sym, "sym"), (IndicatorKey.num, "num")]
+            : [(IndicatorKey.num, "num"), (IndicatorKey.sym, "sym")]
+        let top: [(Int64, String)] = [(IndicatorKey.gesture, "gesture"), (IndicatorKey.fn, "fn")]
+        return (ordinary + middle + top).filter { held.contains($0.0) }.map { $0.1 }
     }
 
     var onChange: (() -> Void)?
@@ -286,11 +234,12 @@ final class KeyboardState {
     /// 現在有効なレイヤー名。複数保持しているときはキーマップ側の優先順に合わせる。
     var layerName: String {
         if held.contains(IndicatorKey.fn) { return "Fn" }
-        if held.contains(IndicatorKey.num) && held.contains(IndicatorKey.sym) { return "Fn" }
         if held.contains(IndicatorKey.gesture) { return "ジェスチャ" }
+        if effectiveOS == "Windows" && held.contains(IndicatorKey.num) { return "テンキー" }
         if held.contains(IndicatorKey.sym) { return "記号" }
         if held.contains(IndicatorKey.num) { return "テンキー" }
         if held.contains(IndicatorKey.scroll) { return "スクロール" }
+        if held.contains(IndicatorKey.mouse) { return "マウス" }
         return "ベース"
     }
 
@@ -301,6 +250,7 @@ final class KeyboardState {
         case "記号": return "SYM"
         case "テンキー": return "123"
         case "スクロール": return "SCR"
+        case "マウス": return "AML"
         default: return effectiveOS == "Windows" ? "WIN" : "ABC"
         }
     }
@@ -314,7 +264,7 @@ final class KeyboardState {
 
     /// レイヤーの入り口キー以外で、実際に押しているキー。トグルの対象
     var typedIndices: [Int] {
-        KeyHighlight.typedIndices(codes: pressedCodes, layer: layerId)
+        Array(Set(pressedPositions.values.flatMap { $0 })).sorted()
     }
 
     func press(_ key: Int64) {
@@ -335,15 +285,35 @@ final class KeyboardState {
         }
     }
 
-    func noteKey(_ code: Int64, down: Bool) {
+    func noteKey(_ code: Int64, down: Bool, flags: CGEventFlags = []) {
         applyOnMain {
             let changed: Bool
             if down {
                 changed = self.pressedCodes.insert(code).inserted
+                if changed {
+                    let keys = KeymapLayers.resolvedKeys(layerId: self.layerId, os: self.effectiveOS, activeLayers: self.activeLayerIDs)
+                    self.pressedPositions[code] = KeyHighlight.indices(code: code, flags: flags, keys: keys)
+                }
             } else {
                 changed = self.pressedCodes.remove(code) != nil
+                self.pressedPositions.removeValue(forKey: code)
             }
             if changed { self.notifyPressedChange() }
+        }
+    }
+
+    func noteMouseButton(_ button: Int, down: Bool) {
+        applyOnMain {
+            let id = Int64(2000 + button)
+            if down {
+                self.pressedCodes.insert(id)
+                let keys = KeymapLayers.resolvedKeys(layerId: self.layerId, os: self.effectiveOS, activeLayers: self.activeLayerIDs)
+                self.pressedPositions[id] = keys.indices.filter { keys[$0].output == "MB\(button)" }
+            } else {
+                self.pressedCodes.remove(id)
+                self.pressedPositions.removeValue(forKey: id)
+            }
+            self.notifyPressedChange()
         }
     }
 
@@ -353,6 +323,7 @@ final class KeyboardState {
             guard !self.held.isEmpty || !self.pressedCodes.isEmpty else { return }
             self.held.removeAll()
             self.pressedCodes.removeAll()
+            self.pressedPositions.removeAll()
             self.notifyChange()
             self.notifyPressedChange()
         }
@@ -391,6 +362,7 @@ final class EventTapMonitor {
     private var hidOpen = false
     private var retryTimer: Timer?
     private let gestures = GestureEngine()
+    private let scrolling = ScrollController()
 
     func start() {
         // ここでは許可を「見る」だけで「求め」ない。AXIsProcessTrustedWithOptions /
@@ -422,6 +394,7 @@ final class EventTapMonitor {
                 publishStatus()
                 return true
             }
+            CFMachPortInvalidate(tap)
             self.tap = nil
         }
 
@@ -430,7 +403,13 @@ final class EventTapMonitor {
             (1 << CGEventType.keyUp.rawValue) |
             (1 << CGEventType.mouseMoved.rawValue) |
             (1 << CGEventType.leftMouseDragged.rawValue) |
-            (1 << CGEventType.rightMouseDragged.rawValue)
+            (1 << CGEventType.rightMouseDragged.rawValue) |
+            (1 << CGEventType.otherMouseDragged.rawValue) |
+            (1 << CGEventType.flagsChanged.rawValue) |
+            (1 << CGEventType.scrollWheel.rawValue) |
+            (1 << CGEventType.leftMouseDown.rawValue) |
+            (1 << CGEventType.rightMouseDown.rawValue) |
+            (1 << CGEventType.otherMouseDown.rawValue)
 
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
@@ -458,10 +437,10 @@ final class EventTapMonitor {
     }
 
     private func startGlobalMonitor() {
-        NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+        NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
             self?.handleNSEvent(event)
         }
-        NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+        NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
             self?.handleNSEvent(event)
             return IndicatorKey.all.contains(Int64(event.keyCode)) ? nil : event
         }
@@ -482,12 +461,22 @@ final class EventTapMonitor {
                 kIOHIDDeviceUsagePageKey as String: kHIDPage_Consumer,
                 kIOHIDDeviceUsageKey as String: kHIDUsage_Csmr_ConsumerControl,
             ],
+            [
+                kIOHIDDeviceUsagePageKey as String: kHIDPage_GenericDesktop,
+                kIOHIDDeviceUsageKey as String: kHIDUsage_GD_Mouse,
+            ],
         ]
         IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
         let ctx = Unmanaged.passUnretained(self).toOpaque()
         IOHIDManagerRegisterInputValueCallback(manager, { context, _, _, value in
             guard let context else { return }
             Unmanaged<EventTapMonitor>.fromOpaque(context).takeUnretainedValue().handleHID(value)
+        }, ctx)
+        IOHIDManagerRegisterDeviceRemovalCallback(manager, { context, _, _, device in
+            guard let context, EventTapMonitor.isBobTail(device) else { return }
+            let monitor = Unmanaged<EventTapMonitor>.fromOpaque(context).takeUnretainedValue()
+            monitor.scrolling.cancel()
+            KeyboardState.shared.clearHeld()
         }, ctx)
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
         hid = manager
@@ -498,6 +487,15 @@ final class EventTapMonitor {
     /// 一度失敗しても諦めずに開き直す。
     @discardableResult
     private func openHIDIfNeeded() -> Bool {
+        if !Permissions.inputMonitoring {
+            if hidOpen, let hid {
+                IOHIDManagerClose(hid, IOOptionBits(kIOHIDOptionsTypeNone))
+                scrolling.cancel()
+                KeyboardState.shared.clearHeld()
+            }
+            hidOpen = false
+            return false
+        }
         if hidOpen { return true }
         guard let hid else { return false }
         guard Permissions.inputMonitoring else { return false }
@@ -505,25 +503,50 @@ final class EventTapMonitor {
         return hidOpen
     }
 
+    private static func isBobTail(_ device: IOHIDDevice) -> Bool {
+        let product = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String
+        return product?.localizedCaseInsensitiveContains("bobtail") == true
+    }
+
     private func handleHID(_ value: IOHIDValue) {
         let element = IOHIDValueGetElement(value)
+        guard Self.isBobTail(IOHIDElementGetDevice(element)) else { return }
         let page = IOHIDElementGetUsagePage(element)
         let usage = IOHIDElementGetUsage(element)
         let down = IOHIDValueGetIntegerValue(value) != 0
+        if down && page == UInt32(kHIDPage_GenericDesktop) && usage == UInt32(kHIDUsage_GD_Wheel) {
+            scrolling.noteWheel(horizontal: false, ticks: Double(IOHIDValueGetIntegerValue(value)))
+            return
+        }
+        if down && page == UInt32(kHIDPage_Consumer) && usage == 0x0238 {
+            scrolling.noteWheel(horizontal: true, ticks: Double(IOHIDValueGetIntegerValue(value)))
+            return
+        }
+        if page == UInt32(kHIDPage_Button) {
+            KeyboardState.shared.noteMouseButton(Int(usage), down: down)
+            return
+        }
         guard let key = IndicatorKey.fromHIDUsage(page: page, usage: usage) else { return }
         if down {
             KeyboardState.shared.press(key)
         } else {
             if key == IndicatorKey.gesture { gestures.cancel() }
+            if key == IndicatorKey.scroll { scrolling.finishInput() }
             KeyboardState.shared.release(key)
         }
     }
 
     private func handleNSEvent(_ event: NSEvent) {
         let code = Int64(event.keyCode)
+        if event.type == .flagsChanged {
+            if let flag = KeyCodes.modifier(for: code) {
+                KeyboardState.shared.noteKey(code, down: CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue)).contains(flag))
+            }
+            return
+        }
         if !IndicatorKey.all.contains(code) {
             if event.type == .keyDown {
-                if !event.isARepeat { KeyboardState.shared.noteKey(code, down: true) }
+                if !event.isARepeat { KeyboardState.shared.noteKey(code, down: true, flags: CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))) }
             } else {
                 KeyboardState.shared.noteKey(code, down: false)
             }
@@ -565,17 +588,29 @@ final class EventTapMonitor {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
-            gestures.finish()
+            gestures.cancel()
+            scrolling.cancel()
             state.clearHeld()
             publishStatus()
             return Unmanaged.passUnretained(event)
 
+        case .scrollWheel:
+            if scrolling.handle(event) { return nil }
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            scrolling.cancel()
+        case .flagsChanged:
+            scrolling.cancel()
+            let code = event.getIntegerValueField(.keyboardEventKeycode)
+            if let flag = KeyCodes.modifier(for: code) {
+                state.noteKey(code, down: event.flags.contains(flag))
+            }
         case .keyDown, .keyUp:
+            if type == .keyDown { scrolling.cancel() }
             let code = event.getIntegerValueField(.keyboardEventKeycode)
             if !IndicatorKey.all.contains(code) {
                 if type == .keyDown {
                     if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
-                        state.noteKey(code, down: true)
+                        state.noteKey(code, down: true, flags: event.flags)
                     }
                 } else {
                     state.noteKey(code, down: false)
@@ -594,7 +629,8 @@ final class EventTapMonitor {
             }
             return nil
 
-        case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
+        case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+            scrolling.cancel()
             // ファームウェアは Gesture 押し中にカーソルを送らない。
             // マウス移動が来た = キーはもう離れている。残りジェスチャは捨てる。
             if state.isGestureLayerHeld {
@@ -616,131 +652,193 @@ final class EventTapMonitor {
 final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private var central: CBCentralManager!
     private var keyboard: CBPeripheral?
-    /// 各バッテリーレベル characteristic が左右どちらのものかを覚えておく
-    private var sideByCharacteristic = [CBUUID: String]()
-    private var characteristicOrder = [CBCharacteristic]()
+    private var readings = BatteryReadings()
+    private var characteristics = [ObjectIdentifier: CBCharacteristic]()
+    private var refreshTimer: Timer?
+    private var retryTimer: Timer?
 
     private let batteryService = CBUUID(string: "180F")
     private let batteryLevel = CBUUID(string: "2A19")
     private let userDescription = CBUUID(string: "2901")
-
-    /// CONFIG_ZMK_KEYBOARD_NAME と合わせる
-    private let namePrefix = "BobTail"
+    private let presentationFormat = CBUUID(string: "2904")
 
     override init() {
         super.init()
         central = CBCentralManager(delegate: self, queue: .main)
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.refresh()
         }
+    }
+
+    deinit {
+        refreshTimer?.invalidate()
+        retryTimer?.invalidate()
     }
 
     func refresh() {
         guard central.state == .poweredOn else { return }
         if let keyboard, keyboard.state == .connected {
-            for characteristic in characteristicOrder {
-                keyboard.readValue(for: characteristic)
+            if characteristics.isEmpty {
+                keyboard.discoverServices([batteryService])
             }
-        } else {
+            for (id, characteristic) in characteristics {
+                keyboard.readValue(for: characteristic)
+                if !readings.hasIdentity(id) {
+                    keyboard.discoverDescriptors(for: characteristic)
+                }
+            }
+        } else if keyboard?.state != .connecting {
             discover()
         }
     }
 
     private func discover() {
+        guard central.state == .poweredOn else { return }
         let connected = central.retrieveConnectedPeripherals(withServices: [batteryService])
-        if let match = connected.first(where: { ($0.name ?? "").hasPrefix(namePrefix) }) ?? connected.first {
+        // A mouse/headset can expose BAS too. Never substitute another connected device.
+        if let match = connected.first(where: { BatteryReadings.matchesKeyboard(name: $0.name) }) {
+            clearReadings()
             keyboard = match
             match.delegate = self
             central.connect(match, options: nil)
-            KeyboardState.shared.bluetoothStatus = "\(match.name ?? "キーボード") に接続中…"
+            setStatus("\(match.name ?? "BobTail") に接続中…")
         } else {
-            KeyboardState.shared.bluetoothStatus = "キーボードが見つかりません"
-            KeyboardState.shared.notifyUI()
+            clearReadings()
+            setStatus("BobTail が見つかりません")
         }
     }
 
     func centralManagerDidUpdateState(_ manager: CBCentralManager) {
+        retryTimer?.invalidate()
+        clearReadings()
         switch manager.state {
         case .poweredOn:
             discover()
         case .unauthorized:
-            KeyboardState.shared.bluetoothStatus = "Bluetooth の使用が許可されていません"
-            KeyboardState.shared.notifyUI()
+            keyboard = nil
+            setStatus("Bluetooth の使用が許可されていません")
         default:
-            KeyboardState.shared.bluetoothStatus = "Bluetooth が利用できません"
-            KeyboardState.shared.notifyUI()
+            keyboard = nil
+            setStatus("Bluetooth が利用できません")
         }
     }
 
     func centralManager(_ manager: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        sideByCharacteristic.removeAll()
-        characteristicOrder.removeAll()
+        guard keyboard === peripheral else { return }
+        retryTimer?.invalidate()
+        clearReadings()
+        setStatus("接続済み（残量を取得中…）")
         peripheral.discoverServices([batteryService])
     }
 
     func centralManager(_ manager: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        KeyboardState.shared.bluetoothStatus = "切断されました"
-        KeyboardState.shared.notifyUI()
-        central.connect(peripheral, options: nil)
+        guard keyboard === peripheral else { return }
+        clearReadings()
+        setStatus("切断されました（再接続待ち）")
+        if central.state == .poweredOn { central.connect(peripheral, options: nil) }
+    }
+
+    func centralManager(_ manager: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        guard keyboard === peripheral else { return }
+        clearReadings()
+        keyboard = nil
+        setStatus("接続できませんでした（再試行待ち）")
+        retryTimer?.invalidate()
+        retryTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
+            self?.discover()
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
+        guard keyboard === peripheral,
+              invalidatedServices.contains(where: { $0.uuid == batteryService }) else { return }
+        clearReadings()
+        setStatus("バッテリー情報を再取得中…")
+        peripheral.discoverServices([batteryService])
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        for service in peripheral.services ?? [] where service.uuid == batteryService {
+        guard keyboard === peripheral, peripheral.state == .connected else { return }
+        guard error == nil else {
+            setStatus("バッテリーサービスを取得できません")
+            return
+        }
+        let services = (peripheral.services ?? []).filter { $0.uuid == batteryService }
+        if services.isEmpty { setStatus("バッテリーサービスが見つかりません") }
+        for service in services {
             peripheral.discoverCharacteristics([batteryLevel], for: service)
         }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        guard keyboard === peripheral, peripheral.state == .connected,
+              service.uuid == batteryService else { return }
+        guard error == nil else {
+            setStatus("バッテリー情報を取得できません")
+            return
+        }
         for characteristic in service.characteristics ?? [] where characteristic.uuid == batteryLevel {
-            characteristicOrder.append(characteristic)
+            let id = ObjectIdentifier(characteristic)
+            characteristics[id] = characteristic
+            readings.register(id)
             peripheral.discoverDescriptors(for: characteristic)
             peripheral.readValue(for: characteristic)
             if characteristic.properties.contains(.notify) {
                 peripheral.setNotifyValue(true, for: characteristic)
             }
         }
-        KeyboardState.shared.bluetoothStatus = "接続済み"
-        KeyboardState.shared.notifyUI()
+        publish()
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverDescriptorsFor characteristic: CBCharacteristic, error: Error?) {
-        for descriptor in characteristic.descriptors ?? [] where descriptor.uuid == userDescription {
+        guard accepts(peripheral, characteristic), error == nil else { return }
+        for descriptor in characteristic.descriptors ?? []
+            where descriptor.uuid == userDescription || descriptor.uuid == presentationFormat {
             peripheral.readValue(for: descriptor)
         }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor descriptor: CBDescriptor, error: Error?) {
-        // ZMK は左手側(ペリフェラル)の characteristic に "Peripheral 0" という説明を付ける
-        guard let text = descriptor.value as? String, let characteristic = descriptor.characteristic else { return }
-        sideByCharacteristic[characteristic.uuid] = text.contains("Peripheral") ? "left" : "right"
-        assignSides()
-        publish(characteristic)
+        guard error == nil, let characteristic = descriptor.characteristic,
+              accepts(peripheral, characteristic) else { return }
+        let id = ObjectIdentifier(characteristic)
+        if descriptor.uuid == userDescription, let text = descriptor.value as? String {
+            readings.identify(id, userDescription: text)
+        } else if descriptor.uuid == presentationFormat, let data = descriptor.value as? Data {
+            readings.identify(id, presentation: data)
+        }
+        publish()
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        assignSides()
-        publish(characteristic)
+        guard accepts(peripheral, characteristic) else { return }
+        readings.update(ObjectIdentifier(characteristic), data: error == nil ? characteristic.value : nil)
+        publish()
     }
 
-    /// 説明子が読めなかった場合の保険。ZMK は右手側(セントラル)の Battery Service を先に公開する
-    private func assignSides() {
-        guard sideByCharacteristic.isEmpty else { return }
-        for (index, characteristic) in characteristicOrder.enumerated() {
-            sideByCharacteristic[characteristic.uuid] = index == 0 ? "right" : "left"
-        }
+    private func accepts(_ peripheral: CBPeripheral, _ characteristic: CBCharacteristic) -> Bool {
+        keyboard === peripheral && peripheral.state == .connected &&
+            characteristics[ObjectIdentifier(characteristic)] != nil
     }
 
-    private func publish(_ characteristic: CBCharacteristic) {
-        guard let data = characteristic.value, let level = data.first else { return }
-        let side = sideByCharacteristic[characteristic.uuid]
-            ?? (characteristicOrder.first?.uuid == characteristic.uuid ? "right" : "left")
-        if side == "left" {
-            KeyboardState.shared.leftBattery = Int(level)
-        } else {
-            KeyboardState.shared.rightBattery = Int(level)
-        }
-        KeyboardState.shared.bluetoothStatus = "接続済み"
+    private func clearReadings() {
+        characteristics.removeAll()
+        readings.reset()
+        KeyboardState.shared.leftBattery = nil
+        KeyboardState.shared.rightBattery = nil
+    }
+
+    private func setStatus(_ text: String) {
+        KeyboardState.shared.bluetoothStatus = text
         KeyboardState.shared.notifyUI()
+    }
+
+    private func publish() {
+        let state = KeyboardState.shared
+        state.leftBattery = readings.level(for: .left)
+        state.rightBattery = readings.level(for: .right)
+        setStatus(state.leftBattery != nil && state.rightBattery != nil
+            ? "接続済み" : "接続済み（未取得の残量は — 表示）")
     }
 }
 
