@@ -571,24 +571,7 @@ final class KeymapHUDView: NSView {
         palette.noneStroke.setFill()
         line.fill()
 
-        drawGrip(palette: palette)
-    }
-
-    private func drawGrip(palette: KeymapPalette) {
-        palette.plateFaint.withAlphaComponent(0.45).setStroke()
-        for corner in OverlayResizeCorner.allCases {
-            let x = corner.isLeft ? bounds.minX + 6 : bounds.maxX - 6
-            let y = corner.isTop ? bounds.minY + 6 : bounds.maxY - 6
-            let inwardX: CGFloat = corner.isLeft ? 1 : -1
-            let inwardY: CGFloat = corner.isTop ? 1 : -1
-            for offset in stride(from: CGFloat(3), through: CGFloat(9), by: 3) {
-                let path = NSBezierPath()
-                path.move(to: NSPoint(x: x + inwardX * offset, y: y))
-                path.line(to: NSPoint(x: x, y: y + inwardY * offset))
-                path.lineWidth = 1
-                path.stroke()
-            }
-        }
+        // Corner hit areas remain active; intentionally draw no resize marks.
     }
 
     private func drawLeft(_ text: String, in rect: NSRect, size: CGFloat,
