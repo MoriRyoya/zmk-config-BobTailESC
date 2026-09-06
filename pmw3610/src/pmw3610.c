@@ -25,6 +25,7 @@
 #include <zmk/events/layer_state_changed.h>
 #include "pmw3610.h"
 #include "scroll_quantize.h"
+#include "bobtail_status.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
@@ -910,6 +911,12 @@ static int pmw3610_report_data(const struct device *dev) {
         data->sw_smart_flag = true;
     }
 #endif
+
+    /* Notify before both 125 Hz sample pairing and wheel quantization. Even
+     * one sensor count can brake the host's coast without moving the pointer. */
+    if (input_mode == SCROLL && (x != 0 || y != 0)) {
+        bobtail_scroll_motion();
+    }
 
 #ifdef CONFIG_PMW3610_POLLING_RATE_125_SW
     int64_t curr_time = k_uptime_get();
