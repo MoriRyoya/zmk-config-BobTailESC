@@ -597,7 +597,7 @@ final class EventTapMonitor {
     }
 
     private func publishStatus() {
-        let status = "起動後: スクロール入力 \(scrolling.confirmedInputs) / 補間出力 \(scrolling.generatedFrames) / 慣性出力 \(scrolling.coastFrames) / 微小動作通知 \(scrolling.motionBrakes) / ポインタ調整 \(pointing.processedReports)"
+        let status = "起動後: スクロール入力 \(scrolling.confirmedInputs) / 補間出力 \(scrolling.generatedFrames) / 慣性出力 \(scrolling.coastFrames) / 微小動作通知 \(scrolling.motionBrakes) / ズーム入力 \(scrolling.zoomPassthrough) / ポインタ調整 \(pointing.processedReports)"
         if KeyboardState.shared.motionStatus != status {
             KeyboardState.shared.motionStatus = status
             KeyboardState.shared.notifyUI()

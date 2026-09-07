@@ -38,6 +38,11 @@ final class ScrollController {
     private(set) var generatedFrames = 0
     private(set) var coastFrames = 0
     private(set) var motionBrakes = 0
+    /// Wheel reports passed through untouched because they carried a zoom
+    /// modifier. The left encoder is the only thing here that sends those, so
+    /// this separates "the keyboard sent nothing" from "macOS did nothing with
+    /// it" without having to reflash to find out which.
+    private(set) var zoomPassthrough = 0
     private var template: CGEvent?
     private var animationClock: ScrollAnimationClock?
     private var observer: NSObjectProtocol?
@@ -119,6 +124,7 @@ final class ScrollController {
         // turns a notch into a burst of them. Shift is not in this list: it is
         // a real scroll modifier. The left encoder rides this path.
         if !event.flags.isDisjoint(with: [.maskControl, .maskCommand, .maskAlternate]) {
+            zoomPassthrough += 1
             cancelMotionOnly()
             return false
         }

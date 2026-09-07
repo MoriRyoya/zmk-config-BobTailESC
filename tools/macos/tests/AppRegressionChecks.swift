@@ -132,6 +132,7 @@ for modifier: CGEventFlags in [.maskControl, .maskCommand, .maskAlternate] {
 }
 for step in 1...40 { zoomTime += Double(step) / 120; zooming.advance() }
 precondition(zoomOut.isEmpty)                                 // nothing generated
+precondition(zooming.zoomPassthrough == 3)                    // ...but they are counted
 zooming.cancel()
 state.release(IndicatorKey.scroll)
 
