@@ -160,14 +160,22 @@
 
            mac は ⌘+ / ⌘- (アプリ内の文字サイズ) ではなく、macOS の
            アクセシビリティズームを使う。こちらはポインタのある位置を中心に
-           画面そのものを拡大する。修飾キーを押しながらのスクロールが
-           その入口で、Control が既定の修飾キー。
+           画面そのものを拡大する。その拡大 / 縮小のショートカットが ⌥⌘= と
+           ⌥⌘- で、JIS 配列では設定画面に出ている ⌥⌘^ / ⌥⌘- と同じキー。
+
            「システム設定 → アクセシビリティ → ズーム機能」で
-           「スクロールジェスチャと修飾キーを使ってズーム」をオンにする。 */
+           「キーボードショートカットを使って拡大縮小」をオンにする。
+
+           修飾キー + ホイールのほうが連続的に拡大できるが、この ZMK の
+           &msc は zmk,behavior-input-two-axis で、押している間に
+           time-to-max-speed-ms = 300 をかけて加速する連続動作になっている。
+           1 目盛り出すだけで約 87 ms 押し続ける必要があり、エンコーダの
+           1 クリックでは何も出ない。キー 1 打で 1 段階のほうが確実で、
+           クリック感とも合う。 */
         enc_zoom_mac: encoder_zoom_mac {
             compatible = "zmk,behavior-sensor-rotate";
             #sensor-binding-cells = <0>;
-            bindings = <&zoom_in_mac>, <&zoom_out_mac>;
+            bindings = <&kp LA(LG(EQUAL))>, <&kp LA(LG(MINUS))>;
             tap-ms = <20>;
         };
 
@@ -180,31 +188,6 @@
     };
 
     macros {
-        /* Control を押した状態でホイールを 1 目盛り送り、離す。HID レポートは
-           送った順に届くので、速く回してもスクロールだけが Control の外へ
-           抜けて、ズームのつもりがページのスクロールになることはない。 */
-        zoom_in_mac: zoom_in_mac {
-            compatible = "zmk,behavior-macro";
-            #binding-cells = <0>;
-            wait-ms = <0>;
-            tap-ms = <0>;
-            bindings =
-                <&macro_press &kp LCTRL>,
-                <&macro_tap &msc SCRL_UP>,
-                <&macro_release &kp LCTRL>;
-        };
-
-        zoom_out_mac: zoom_out_mac {
-            compatible = "zmk,behavior-macro";
-            #binding-cells = <0>;
-            wait-ms = <0>;
-            tap-ms = <0>;
-            bindings =
-                <&macro_press &kp LCTRL>,
-                <&macro_tap &msc SCRL_DOWN>,
-                <&macro_release &kp LCTRL>;
-        };
-
         ind_num: ind_num {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
