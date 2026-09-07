@@ -20,6 +20,15 @@ enum GlidePhysicsTests {
         precondition(GlidePhysics.frictionScale(ticksPerSecond: 12) < 0.5)
         precondition(GlidePhysics.frictionScale(ticksPerSecond: 62.5) == 1)
         precondition(GlidePhysics.frictionScale(ticksPerSecond: 240) > 2)
+        // A normal roll keeps its full tick; a creep fades towards the floor.
+        precondition(GlidePhysics.speedGain(ticksPerSecond: 62.5) == 1)
+        precondition(GlidePhysics.speedGain(ticksPerSecond: GlidePhysics.fullSpeedRate) == 1)
+        precondition(GlidePhysics.speedGain(ticksPerSecond: 0) == GlidePhysics.creepGain)
+        for rate in stride(from: 0.0, through: 30.0, by: 0.25) {
+            let here = GlidePhysics.speedGain(ticksPerSecond: rate)
+            precondition(here >= GlidePhysics.speedGain(ticksPerSecond: rate - 0.25))
+            precondition(here >= GlidePhysics.creepGain && here <= 1)
+        }
         // Compare equal direct travel at different physical roll speeds.
         func fling(gap: Double, ticks: Double) -> Double {
             var p = GlidePhysics(); p.pixelsPerTick = 32 * 1.64
@@ -69,7 +78,7 @@ enum GlidePhysicsTests {
         precondition(p.coasting)
         let interrupted = p.feed(x: 0, y: -1, time: 10.28)
         precondition(interrupted.contains { $0.momentum == 3 })
-        precondition(interrupted.allSatisfy { $0.y <= 0 })
+        precondition(interrupted.allSatisfy { $0.y == 0 }) // the report brakes, it does not travel
         precondition(p.step(time: 10.29).allSatisfy { $0.y <= 0 })
         _ = p.cancel()
         precondition(p.step(time: 10.30).isEmpty)
@@ -82,6 +91,58 @@ enum GlidePhysicsTests {
         p.motionActive = false
         precondition(p.step(time: 30.51).allSatisfy { $0.momentum != 1 && $0.momentum != 2 })
         precondition(!p.active) // old velocity cannot restart the coast after a precision stop
-        print("Glide: small rolls coast, direct distance conserved, phases, 60/120/144 Hz, reversal, cancel and sleep passed.")
+        // Touching a coasting ball stops the page and travels nothing, the way
+        // a finger landing on a trackpad does. In the scroll layer this report
+        // is the only sign the hand is back, so it must not scroll a notch and
+        // must not launch a fresh coast off its own velocity.
+        var brake = GlidePhysics()
+        _ = brake.feed(x: 0, y: 1, time: 40)
+        _ = brake.feed(x: 0, y: 1, time: 40.016)
+        for i in 1...30 { _ = brake.step(time: 40.016 + Double(i) / 120) }
+        precondition(brake.coasting)
+        let stopped = brake.feed(x: 0, y: 1, time: 40.3)
+        precondition(stopped.contains { $0.momentum == 3 })
+        precondition(stopped.allSatisfy { $0.x == 0 && $0.y == 0 })
+        var settled: [GlidePhysics.Frame] = []
+        for i in 1...240 { settled += brake.step(time: 40.3 + Double(i) / 120) }
+        precondition(settled.allSatisfy { $0.x == 0 && $0.y == 0 })
+        precondition(!settled.contains { $0.momentum == 1 || $0.momentum == 2 })
+        precondition(!brake.active && !brake.coasting)
+
+        // A roll that meant to keep going loses only that one braking report.
+        var resume = GlidePhysics()
+        _ = resume.feed(x: 0, y: 1, time: 50)
+        _ = resume.feed(x: 0, y: 1, time: 50.016)
+        for i in 1...30 { _ = resume.step(time: 50.016 + Double(i) / 120) }
+        precondition(resume.coasting)
+        _ = resume.feed(x: 0, y: 1, time: 50.3)
+        var carried = 0.0
+        for k in 1...6 {
+            carried += resume.feed(x: 0, y: 1, time: 50.3 + Double(k) * 0.016).reduce(0) { $0 + $1.y }
+        }
+        for i in 1...600 { carried += resume.step(time: 50.4 + Double(i) / 120).reduce(0) { $0 + $1.y } }
+        precondition(carried > 6 * 32) // six real ticks, at full value, plus a tail
+
+        // A creeping ball scrolls far less per tick than a normal roll, so
+        // "nearly stopped" reads as stopped instead of lurching a whole notch.
+        func rolled(gap: Double) -> Double {
+            var p = GlidePhysics(); p.momentum = 0
+            var travel = 0.0, clock = 60.0
+            for _ in 0..<8 {
+                travel += p.feed(x: 0, y: 1, time: clock).reduce(0) { $0 + $1.y }
+                for i in 1...Int((gap * 240).rounded()) {
+                    travel += p.step(time: clock + Double(i) / 240).reduce(0) { $0 + $1.y }
+                }
+                clock += gap
+            }
+            for i in 1...480 { travel += p.step(time: clock + Double(i) / 240).reduce(0) { $0 + $1.y } }
+            return travel
+        }
+        let normalRoll = rolled(gap: 0.016)
+        precondition(abs(normalRoll - 8 * 32) < 1e-5) // the accepted feel is untouched
+        precondition(rolled(gap: 0.5) < normalRoll * 0.5)   // 2 ticks/s
+        precondition(rolled(gap: 0.2) < rolled(gap: 0.08))  // 5 vs 12.5 ticks/s
+
+        print("Glide: small rolls coast, direct distance conserved, phases, 60/120/144 Hz, braking on touch, creep fade, reversal, cancel and sleep passed.")
     }
 }
