@@ -222,7 +222,11 @@ enum GlidePhysicsTests {
         for (fast, slow) in zip(flung, flung.dropFirst()) {
             precondition(fast > slow * 1.5) // every step up in speed carries further
         }
-        precondition(flung[0] > 900 && flung[3] < 150)
+        // Absolute distance is deliberately not pinned tight here: the coast
+        // leaves at the speed the page is actually moving, so a throw that the
+        // ball spins down out of hands over less than one read off the notches
+        // would. How far it then carries is the coast setting's job.
+        precondition(flung[0] > 600 && flung[3] < 150)
 
         print("Glide: small rolls coast, direct distance conserved, phases, 60/120/144 Hz, braking on touch, creep fade, coast hand-off, throw scaling, reversal, cancel and sleep passed.")
     }

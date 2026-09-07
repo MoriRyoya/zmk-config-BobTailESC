@@ -69,6 +69,12 @@ struct GlidePhysics {
     /// hard it was thrown -- and reading friction off the dying end made a
     /// hard flick brake like a crawl.
     private var peakRate = 0.0
+    /// Pixels a second the outstanding travel is being paid out at: whatever is
+    /// owed, spread over the time the next notch is due in. Since that is
+    /// exactly what each frame emits, it is also the speed the page is moving,
+    /// and it does not change with the refresh rate the way a figure measured
+    /// back out of the emitted frames would.
+    private var drainRate = 0.0
 
     private static func ease(_ value: Double) -> Double {
         let v = min(1, max(0, value))
@@ -104,7 +110,10 @@ struct GlidePhysics {
         // notch does not read as a stop. Swallow it instead: brake, no travel,
         // no velocity. A roll that means to keep going rebuilds its speed from
         // the next report, exactly as a swipe does after a finger lands.
-        let braking = coasting
+        // Only a ball that had stopped and started again is the hand coming
+        // back. While it is still freewheeling down, its own ticks must not be
+        // read as a brake -- that is the roll finishing, not a new touch.
+        let braking = coasting && !motionActive
         // A gap this long is a new roll -- unless the telemetry says the ball
         // never stopped turning, which makes it one slow roll, not two. Chopping
         // a creep into a gesture per tick restarted the phases every notch and
@@ -151,6 +160,15 @@ struct GlidePhysics {
         if speed > 18000 { vx *= 18000 / speed; vy *= 18000 / speed }
         if braking { vx = 0; vy = 0 }
         if !alreadyDelivered && !braking { pendingX += px; pendingY += py }
+        // One notch, paid out over one gap, is the speed the ball is turning
+        // at. As it slows the gaps lengthen and the payout stretches with them,
+        // so the page decelerates exactly as the hand did instead of stopping
+        // dead between notches. Read off this notch rather than off everything
+        // outstanding: how much of the last one is left over depends on where
+        // the frames happened to fall, and the speed must not.
+        // A braking report buys no travel, so it sets no speed either -- the
+        // coast reads its send-off from this, and would otherwise undo the stop.
+        drainRate = braking ? 0 : hypot(px, py) / max(0.004, interval)
         lastX = x; lastY = y; lastInput = time; released = false; reports += 1
         // A small nonzero first pixel establishes a real gesture immediately;
         // the remaining direct distance is emitted on the animation clock.
@@ -195,9 +213,28 @@ struct GlidePhysics {
             if hypot(vx, vy) < 8 || coastAge >= 4 { out += cancel() }
             return out
         }
-        let idle = !motionActive && (released || time - lastInput >= min(0.075, max(0.032, interval * 2.2)))
+        // Without the 0x01D7 telemetry there is nothing but a timer to say the
+        // roll is over. With it, the ball itself says so, and waiting out a
+        // second threshold on top only holds the page still.
+        let idle = !motionActive && (released || sensorTracked
+            || time - lastInput >= min(0.075, max(0.032, interval * 2.2)))
+        // Move at the speed the roll is actually going, rather than spending
+        // each notch as its own decaying pulse. One notch every 16 ms against a
+        // 10 ms time constant was almost gone before the next arrived, so the
+        // page surged and stalled 60 times a second instead of travelling, and
+        // there was no steady speed left for the coast to continue from.
+        // Spread what is owed across the time the next notch is due in, rather
+        // than spending it as fast as an exponential will allow. At a steady
+        // roll that is a constant speed; as the ball slows and the gaps grow,
+        // the last notch is drawn out over a longer one, which is exactly the
+        // deceleration the hand performed -- and it keeps the page moving
+        // through the wait for the telemetry to confirm the ball has stopped.
         let alpha = 1 - exp(-dt / max(0.008, response))
-        var dx = pendingX * alpha, dy = pendingY * alpha
+        let remaining = hypot(pendingX, pendingY)
+        // A constant rate, not a constant fraction: a fraction of a shrinking
+        // remainder is an exponential that never actually arrives.
+        let share = drainRate > 0 && remaining > 0 ? min(1, drainRate * dt / remaining) : alpha
+        var dx = pendingX * share, dy = pendingY * share
         if idle && hypot(pendingX - dx, pendingY - dy) < 0.5 { dx = pendingX; dy = pendingY }
         pendingX -= dx; pendingY -= dy
         var out: [Frame] = []
@@ -208,6 +245,14 @@ struct GlidePhysics {
             if began { out.append(Frame(phase: 4)); began = false }
             // Even one notch has a small tail; two closely spaced reports
             // preserve the measured exit speed. Slow precision rolls do not fling.
+            // Leave at the speed the page is travelling at, not at one worked
+            // back out of the notches. Asked to glide on from what it was
+            // doing, this is the only number that answers the question.
+            let heading = hypot(lastX, lastY)
+            if heading > 0 && drainRate > 0 {
+                vx = lastX / heading * drainRate
+                vy = lastY / heading * drainRate
+            }
             let commitment = reports == 1 ? 0.3 : min(1, 0.25 + Double(reports) * 0.125)
             vx *= commitment; vy *= commitment
             // The last tick measured the ball's speed then, not now. Every roll
