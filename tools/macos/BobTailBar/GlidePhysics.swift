@@ -31,6 +31,13 @@ struct GlidePhysics {
     /// one of them, and a rate measured only inside a gesture would never see
     /// a creep at all.
     static let rollWindow = 0.75        // seconds
+    /// BOBTAIL_MOTION_IDLE_MS: the telemetry holds for this long after the
+    /// last sensor count, so subtract it to find when the ball really stopped.
+    static let telemetryIdle = 0.040    // seconds
+    /// How long the ball may keep turning past its last tick before the coast
+    /// it hands over is gone. A hand easing to a stop crosses this; a hand
+    /// stopping a fast roll dead does not.
+    static let handoffWindow = 0.12     // seconds
 
     var pixelsPerTick = GlidePhysics.basePixelsPerTick
     var momentum = 0.61
@@ -55,6 +62,8 @@ struct GlidePhysics {
     /// friction curve still sees the ball's real speed after attenuation.
     private var tickRate = GlidePhysics.fullSpeedRate
     private var lastTickTime = 0.0
+    /// Last frame at which the telemetry said the ball was still turning.
+    private var ballTurning = 0.0
 
     private static func ease(_ value: Double) -> Double {
         let v = min(1, max(0, value))
@@ -91,20 +100,31 @@ struct GlidePhysics {
         // no velocity. A roll that means to keep going rebuilds its speed from
         // the next report, exactly as a swipe does after a finger lands.
         let braking = coasting
-        if coasting || turns || (active && time - lastInput > 0.12) { frames = cancel() }
+        // A gap this long is a new roll -- unless the telemetry says the ball
+        // never stopped turning, which makes it one slow roll, not two. Chopping
+        // a creep into a gesture per tick restarted the phases every notch and
+        // made every tick look like an opening one. The wider cap is only a
+        // guard against a lost telemetry release.
+        let stale = motionActive ? 1.0 : 0.12
+        if coasting || turns || (active && time - lastInput > stale) { frames = cancel() }
         if !active { active = true; lastFrame = time; lastInput = time; interval = 0.016 }
         let gap = time - lastInput
         let ticks = max(abs(x), abs(y))
         let sinceTick = lastTickTime > 0 ? time - lastTickTime : Double.infinity
         if sinceTick > Self.rollWindow || sinceTick <= 0 {
-            // A fresh touch. One notch of ball travel is deliberate, so it is
-            // worth its full value; only a continued creep fades.
             tickRate = Self.fullSpeedRate
         } else {
-            tickRate = tickRate * 0.45 + (ticks / sinceTick) * 0.55
+            // Speeding up counts at once; only slowing down is smoothed. A
+            // roll must never be held back by how slow the last one ended.
+            let instant = ticks / sinceTick
+            tickRate = instant > tickRate ? instant : tickRate * 0.45 + instant * 0.55
         }
         lastTickTime = time
-        let gain = Self.speedGain(ticksPerSecond: tickRate)
+        // The report that opens a gesture is a deliberate notch of travel and
+        // always worth full value. Only a roll already under way can creep --
+        // and with the 0x01D7 telemetry holding the gesture open, a creep
+        // stays inside one gesture, so the fade still sees it.
+        let gain = reports == 0 ? 1 : Self.speedGain(ticksPerSecond: tickRate)
         let px = x * pixelsPerTick * gain, py = y * pixelsPerTick * gain
         if reports > 0 && gap > 0 {
             interval = min(0.1, max(0.004, gap))
@@ -144,6 +164,7 @@ struct GlidePhysics {
         guard dt > 0 else { return [] }
         if dt > 0.25 { return cancel() }
         lastFrame = time
+        if motionActive { ballTurning = time }
         if coasting {
             let tau = coastTau
             // The initial drag is unchanged. Friction then grows quadratically
@@ -178,9 +199,18 @@ struct GlidePhysics {
             // preserve the measured exit speed. Slow precision rolls do not fling.
             let commitment = reports == 1 ? 0.3 : min(1, 0.25 + Double(reports) * 0.125)
             vx *= commitment; vy *= commitment
-            // Motion telemetry can hold a gesture open through slow sub-tick
-            // adjustments. An old wheel velocity must not launch a new fling.
-            if sensorTracked && time - lastInput > 0.16 { vx = 0; vy = 0 }
+            // The last tick measured the ball's speed then, not now. Every roll
+            // decelerates into its stop, so handing the coast that stale speed
+            // makes the page surge exactly as the hand finishes. The telemetry
+            // says how long the ball kept turning without earning another tick,
+            // which is precisely how much it slowed: fade the hand-off by it.
+            // A continuous ramp, where a 160 ms cutoff used to make the same
+            // roll either coast in full or not at all.
+            if sensorTracked {
+                let turnedUntil = max(lastInput, ballTurning - Self.telemetryIdle)
+                let fade = max(0, 1 - (turnedUntil - lastInput) / Self.handoffWindow)
+                vx *= fade; vy *= fade
+            }
             if momentum > 0 && hypot(vx, vy) >= 40 {
                 coastTau = max(0.05, momentum * Self.frictionScale(ticksPerSecond: exitRate))
                 coasting = true; coastAge = 0

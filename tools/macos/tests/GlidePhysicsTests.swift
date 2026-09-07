@@ -125,8 +125,11 @@ enum GlidePhysicsTests {
 
         // A creeping ball scrolls far less per tick than a normal roll, so
         // "nearly stopped" reads as stopped instead of lurching a whole notch.
+        // The ball is turning the whole time, which is what the 0x01D7
+        // telemetry reports and what holds the creep inside one gesture.
         func rolled(gap: Double) -> Double {
             var p = GlidePhysics(); p.momentum = 0
+            p.motionActive = true
             var travel = 0.0, clock = 60.0
             for _ in 0..<8 {
                 travel += p.feed(x: 0, y: 1, time: clock).reduce(0) { $0 + $1.y }
@@ -135,6 +138,7 @@ enum GlidePhysicsTests {
                 }
                 clock += gap
             }
+            p.motionActive = false
             for i in 1...480 { travel += p.step(time: clock + Double(i) / 240).reduce(0) { $0 + $1.y } }
             return travel
         }
@@ -143,6 +147,49 @@ enum GlidePhysicsTests {
         precondition(rolled(gap: 0.5) < normalRoll * 0.5)   // 2 ticks/s
         precondition(rolled(gap: 0.2) < rolled(gap: 0.08))  // 5 vs 12.5 ticks/s
 
-        print("Glide: small rolls coast, direct distance conserved, phases, 60/120/144 Hz, braking on touch, creep fade, reversal, cancel and sleep passed.")
+        // Opening a roll is never faded by how slowly the last one ended, so a
+        // re-touch that cancels a coast still starts at full value.
+        var restart = GlidePhysics(); restart.momentum = 0
+        restart.motionActive = true
+        for k in 0..<4 { _ = restart.feed(x: 0, y: 1, time: 65 + Double(k) * 0.5) }
+        restart.motionActive = false
+        _ = restart.cancel()
+        var opening = 0.0
+        restart.motionActive = true
+        opening += restart.feed(x: 0, y: 1, time: 67).reduce(0) { $0 + $1.y }
+        restart.motionActive = false
+        for i in 1...480 { opening += restart.step(time: 67 + Double(i) / 240).reduce(0) { $0 + $1.y } }
+        precondition(abs(opening - 32) < 1e-5)
+
+        // The hand-off fades with how long the ball kept turning past its last
+        // tick, which is exactly how much it slowed. Stopping a fast roll dead
+        // still flings; easing to a stop hands over nothing; in between is a
+        // ramp, where a 160 ms cutoff used to make it all-or-nothing.
+        func handoff(creep: Double) -> Double {
+            var p = GlidePhysics()
+            p.motionActive = true
+            var clock = 70.0
+            for _ in 0..<8 {
+                _ = p.feed(x: 0, y: 1, time: clock)
+                for i in 1...2 { _ = p.step(time: clock + Double(i) / 120) }
+                clock += 0.016
+            }
+            var creeping = 0.0
+            while creeping < creep { _ = p.step(time: clock + creeping); creeping += 1.0 / 120 }
+            p.motionActive = false
+            var coast = 0.0
+            for i in 0...600 {
+                coast += p.step(time: clock + creep + Double(i) / 120)
+                    .filter { $0.momentum > 0 }.reduce(0) { $0 + $1.y }
+            }
+            return coast
+        }
+        let dead = handoff(creep: 0)
+        precondition(dead > 200)
+        precondition(handoff(creep: 0.05) < dead && handoff(creep: 0.05) > 0)
+        precondition(handoff(creep: 0.09) < handoff(creep: 0.05))
+        precondition(handoff(creep: 0.2) == 0)
+
+        print("Glide: small rolls coast, direct distance conserved, phases, 60/120/144 Hz, braking on touch, creep fade, coast hand-off, reversal, cancel and sleep passed.")
     }
 }
