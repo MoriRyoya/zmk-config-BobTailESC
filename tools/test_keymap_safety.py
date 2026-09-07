@@ -76,9 +76,21 @@ class KeymapSafetyTests(unittest.TestCase):
                 resolved = next(sensor_bindings[name].strip() for name in reversed(self.order)
                                 if name in active and name in sensor_bindings)
                 self.assertEqual(resolved, "&enc_zoom_win" if windows else "&enc_zoom_mac")
-        for os_name, modifier in (("mac", "LG"), ("win", "LC")):
-            self.assertRegex(self.source, rf"enc_zoom_{os_name}:[^{{]+\{{[^}}]+"
-                             rf"bindings = <&kp {modifier}\(EQUAL\)>, <&kp {modifier}\(MINUS\)>;")
+        # Windows keeps the front application's own zoom shortcut, because
+        # Magnifier's pointer-following zoom needs magnify.exe already running.
+        self.assertRegex(self.source, r"enc_zoom_win:[^{]+\{[^}]+"
+                         r"bindings = <&kp LC\(EQUAL\)>, <&kp LC\(MINUS\)>;")
+        # macOS magnifies the screen around the pointer instead. That is the
+        # accessibility zoom's scroll gesture -- Control held around exactly one
+        # wheel notch -- and not a keyboard shortcut, which would only resize
+        # the front application's text again.
+        self.assertRegex(self.source, r"enc_zoom_mac:[^{]+\{[^}]+"
+                         r"bindings = <&zoom_in_mac>, <&zoom_out_mac>;")
+        for macro, direction in (("zoom_in_mac", "SCRL_UP"), ("zoom_out_mac", "SCRL_DOWN")):
+            self.assertRegex(self.source, rf"(?s){macro}:[^{{]+\{{.*?"
+                             rf"<&macro_press &kp LCTRL>,\s*"
+                             rf"<&macro_tap &msc {direction}>,\s*"
+                             rf"<&macro_release &kp LCTRL>;")
 
     def test_layouts_match_and_missing_placeholder_is_detected(self):
         metadata = json.loads(LAYOUT.read_text())
