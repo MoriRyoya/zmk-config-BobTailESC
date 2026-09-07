@@ -43,7 +43,7 @@ swiftc -O -module-cache-path "${BUILD_DIR}/module-cache" \
     -framework CoreServices \
     -framework Security \
     -o "${MACOS_DIR}/${APP_NAME}" \
-    main.swift Preferences.swift KeymapView.swift Windows.swift Gesture.swift KeymapSource.swift KeyCodes.swift BatteryReadings.swift OverlayGeometry.swift GlidePhysics.swift PointerPhysics.swift Pointer.swift ScrollAnimationClock.swift Scroll.swift
+    main.swift Preferences.swift KeymapView.swift Windows.swift Gesture.swift KeymapSource.swift KeyCodes.swift BatteryReadings.swift OverlayGeometry.swift GlidePhysics.swift PointerPhysics.swift Pointer.swift ScrollAnimationClock.swift Scroll.swift Zoom.swift
 
 cat > "${APP_DIR}/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

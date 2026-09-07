@@ -370,6 +370,7 @@ final class EventTapMonitor {
     private let gestures = GestureEngine()
     private let scrolling = ScrollController()
     private let pointing = PointerController()
+    private let zooming = ZoomGesture()
     private var displays: [CGRect] = []
 
     func start() {
@@ -540,6 +541,12 @@ final class EventTapMonitor {
             scrolling.noteBallMotion(active: down)
             return
         }
+        // The left encoder. It cannot send a pinch itself -- there is no HID
+        // code for one -- so it reports a detent and the pinch is built here.
+        if page == UInt32(kHIDPage_Consumer) && (usage == 0x01D8 || usage == 0x01D9) {
+            if down { zooming.step(zoomingIn: usage == 0x01D8) }
+            return
+        }
         if down && page == UInt32(kHIDPage_GenericDesktop) &&
             (usage == UInt32(kHIDUsage_GD_X) || usage == UInt32(kHIDUsage_GD_Y)) {
             // Raw motion stops coasting even when a precision filter rounds
@@ -597,7 +604,7 @@ final class EventTapMonitor {
     }
 
     private func publishStatus() {
-        let status = "起動後: スクロール入力 \(scrolling.confirmedInputs) / 補間出力 \(scrolling.generatedFrames) / 慣性出力 \(scrolling.coastFrames) / 微小動作通知 \(scrolling.motionBrakes) / ズーム入力 \(scrolling.zoomPassthrough) / ポインタ調整 \(pointing.processedReports)"
+        let status = "起動後: スクロール入力 \(scrolling.confirmedInputs) / 補間出力 \(scrolling.generatedFrames) / 慣性出力 \(scrolling.coastFrames) / 微小動作通知 \(scrolling.motionBrakes) / ズーム \(zooming.steps) / ポインタ調整 \(pointing.processedReports)"
         if KeyboardState.shared.motionStatus != status {
             KeyboardState.shared.motionStatus = status
             KeyboardState.shared.notifyUI()

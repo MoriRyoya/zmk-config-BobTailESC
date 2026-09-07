@@ -72,6 +72,11 @@
 #define IND_FN   (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D3))
 #define IND_MAC  (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D4))
 #define IND_WIN  (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D5))
+/* 左エンコーダ。押しても何も起きないコードを送り、BobTailBar が
+   トラックパッドのピンチに変換する。ピンチは HID では表現できない
+   macOS 独自のジェスチャなので、キーボードからは送れない */
+#define IND_ZOOM_IN  (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D8))
+#define IND_ZOOM_OUT (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0x01D9))
 /* Scroll 通知は F22。Help だと BobTailBar が飲み込めないとき Finder が
    カーソル下のフォルダを選択してしまう。F22 に対応する仮想キーコードは無いので
    上と同じ理由でそのまま安全に使える */
@@ -158,24 +163,21 @@
            Base と Win だけに sensor-bindings を定義し、他層は未定義のまま
            OS 層へフォールバックする (&trans はセンサー用 API を持たない)。
 
-           mac は ⌘+ / ⌘- (アプリ内の文字サイズ) ではなく、macOS の
-           アクセシビリティズームを使う。こちらはポインタのある位置を中心に
-           画面そのものを拡大する。その拡大 / 縮小のショートカットが ⌥⌘= と
-           ⌥⌘- で、JIS 配列では設定画面に出ている ⌥⌘^ / ⌥⌘- と同じキー。
+           mac が拡大するのはアプリの中身で、画面全体ではない。マウスの
+           ズームつまみやトラックパッドの 2 本指ピンチと同じもの。これは
+           macOS 独自のジェスチャイベントで HID には対応するコードが無いため、
+           キーボードからは送れない。通知だけ送って BobTailBar が変換する。
 
-           「システム設定 → アクセシビリティ → ズーム機能」で
-           「キーボードショートカットを使って拡大縮小」をオンにする。
-
-           修飾キー + ホイールのほうが連続的に拡大できるが、この ZMK の
-           &msc は zmk,behavior-input-two-axis で、押している間に
-           time-to-max-speed-ms = 300 をかけて加速する連続動作になっている。
-           1 目盛り出すだけで約 87 ms 押し続ける必要があり、エンコーダの
-           1 クリックでは何も出ない。キー 1 打で 1 段階のほうが確実で、
-           クリック感とも合う。 */
+           IND_ZOOM_IN / OUT は Consumer ページの未割り当てコードで、どの OS も
+           対応する動作を持たない。BobTailBar が動いていなくても、他のレイヤー
+           通知と同じく前面のアプリに何も入力されない (⌘+ を送っていた頃は
+           アプリの文字サイズが変わり、⌥⌘= を送っていた頃は macOS の画面
+           拡大鏡が動いてしまっていた)。拡大量はアプリ側の設定なので、
+           変えるのに書き込み直す必要もない。 */
         enc_zoom_mac: encoder_zoom_mac {
             compatible = "zmk,behavior-sensor-rotate";
             #sensor-binding-cells = <0>;
-            bindings = <&kp LA(LG(EQUAL))>, <&kp LA(LG(MINUS))>;
+            bindings = <&kp IND_ZOOM_IN>, <&kp IND_ZOOM_OUT>;
             tap-ms = <20>;
         };
 

@@ -80,11 +80,16 @@ class KeymapSafetyTests(unittest.TestCase):
         # Magnifier's pointer-following zoom needs magnify.exe already running.
         self.assertRegex(self.source, r"enc_zoom_win:[^{]+\{[^}]+"
                          r"bindings = <&kp LC\(EQUAL\)>, <&kp LC\(MINUS\)>;")
-        # macOS magnifies the screen around the pointer instead, through the
-        # accessibility zoom's own shortcut. The Option is what separates it
-        # from ⌘= / ⌘-, which is only the front application's text size.
+        # macOS zooms the application instead, as a trackpad pinch. There is no
+        # HID code for one, so the encoder reports a detent on an unassigned
+        # consumer usage and BobTailBar builds the gesture. Anything that is a
+        # real key here leaks into the front application whenever the app is
+        # not running -- ⌘= resized its text, ⌥⌘= drove the screen magnifier.
         self.assertRegex(self.source, r"enc_zoom_mac:[^{]+\{[^}]+"
-                         r"bindings = <&kp LA\(LG\(EQUAL\)\)>, <&kp LA\(LG\(MINUS\)\)>;")
+                         r"bindings = <&kp IND_ZOOM_IN>, <&kp IND_ZOOM_OUT>;")
+        for name, usage in (("IND_ZOOM_IN", "0x01D8"), ("IND_ZOOM_OUT", "0x01D9")):
+            self.assertRegex(self.source, rf"#define {name}\s+"
+                             rf"\(ZMK_HID_USAGE\(HID_USAGE_CONSUMER, {usage}\)\)")
 
     def test_layouts_match_and_missing_placeholder_is_detected(self):
         metadata = json.loads(LAYOUT.read_text())

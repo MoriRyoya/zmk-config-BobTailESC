@@ -155,6 +155,14 @@ final class Preferences {
         get { bounded("scrollResponse", fallback: 0.010, range: 0.01...0.08) }
         set { defaults.set(min(0.08, max(0.01, newValue)), forKey: "scrollResponse"); ping() }
     }
+    /// Magnification per encoder detent, as a fraction of the current scale.
+    /// A trackpad pinch sends many small deltas; one detent is a bigger step
+    /// than one finger movement, but far smaller than a zoom keystroke.
+    var encoderZoomStep: Double {
+        get { bounded("encoderZoomStep", fallback: 0.10, range: 0.02...0.5) }
+        set { defaults.set(min(0.5, max(0.02, newValue)), forKey: "encoderZoomStep"); ping() }
+    }
+
     private func bounded(_ key: String, fallback: Double, range: ClosedRange<Double>) -> Double {
         guard let value = defaults.object(forKey: key) as? Double, value.isFinite else { return fallback }
         return min(range.upperBound, max(range.lowerBound, value))

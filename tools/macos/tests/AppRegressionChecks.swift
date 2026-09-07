@@ -136,6 +136,25 @@ precondition(zooming.zoomPassthrough == 3)                    // ...but they are
 zooming.cancel()
 state.release(IndicatorKey.scroll)
 
+// The encoder's pinch has to read back as a trackpad magnification, because
+// that is the decoding AppKit does before handing it to an application. The
+// detents coalesce into one gesture: began, then changed, then a single ended.
+var pinched: [CGEvent] = []
+let zoom = ZoomGesture(automaticFinish: false, deliver: { pinched.append($0.copy()!) })
+zoom.step(zoomingIn: true)
+zoom.step(zoomingIn: true)
+zoom.step(zoomingIn: false)
+zoom.finish()
+zoom.finish()   // idempotent: no stray second ending
+precondition(pinched.count == 4)
+precondition(zoom.steps == 3)
+let magnified = pinched.map { NSEvent(cgEvent: $0)! }
+precondition(magnified.allSatisfy { $0.type == .magnify })
+precondition(magnified.map { $0.phase } == [.began, .changed, .changed, .ended])
+precondition(magnified[0].magnification > 0 && magnified[1].magnification > 0)
+precondition(magnified[2].magnification < 0)   // counter-clockwise zooms out
+precondition(magnified[3].magnification == 0)  // the ending carries no travel
+
 // Reverse continues to work when inertia is disabled.
 scrollPreferences(reverse: true, enabled: false)
 var clock = 20.0
@@ -257,4 +276,4 @@ precondition(PointerController.clamp(CGPoint(x: -5, y: 900), to: [screen]) == CG
 // Keep corner resizing but prevent the decorative hatch marks from returning.
 let hudSource = try String(contentsOf: repo.appendingPathComponent("tools/macos/BobTailBar/KeymapView.swift"), encoding: .utf8)
 precondition(!hudSource.contains("drawGrip("))
-print("App checks: keymap/AML, scroll arrival orders and reverse, native pixel events, live animation under 250 Hz input, pointer device matching/clipping/drag, and undecorated corners passed.")
+print("App checks: keymap/AML, scroll arrival orders and reverse, native pixel events, live animation under 250 Hz input, encoder pinch gestures, pointer device matching/clipping/drag, and undecorated corners passed.")
