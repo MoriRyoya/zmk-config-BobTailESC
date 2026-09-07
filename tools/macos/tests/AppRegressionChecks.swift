@@ -112,6 +112,29 @@ for reverse in [false, true] {
     }
 }
 
+// A zoom modifier passes straight through: the left encoder sends Control plus
+// a wheel notch for the pointer-centred magnifier, and reversing or
+// interpolating that would invert the zoom or turn one notch into many.
+scrollPreferences(reverse: true)
+state.clearHeld()
+state.press(IndicatorKey.scroll)
+var zoomTime = 80.0
+var zoomOut: [CGEvent] = []
+let zooming = ScrollController(now: { zoomTime }, automaticAnimation: false,
+                               deliver: { zoomOut.append($0.copy()!) })
+for modifier: CGEventFlags in [.maskControl, .maskCommand, .maskAlternate] {
+    let wheeled = wheel(false, 1)
+    wheeled.flags = modifier
+    zooming.noteWheel(horizontal: false, ticks: 1)
+    precondition(!zooming.handle(wheeled))                    // delivered untouched
+    precondition(wheeled.getIntegerValueField(.scrollWheelEventDeltaAxis1) == 1)
+    zoomTime += 0.020
+}
+for step in 1...40 { zoomTime += Double(step) / 120; zooming.advance() }
+precondition(zoomOut.isEmpty)                                 // nothing generated
+zooming.cancel()
+state.release(IndicatorKey.scroll)
+
 // Reverse continues to work when inertia is disabled.
 scrollPreferences(reverse: true, enabled: false)
 var clock = 20.0

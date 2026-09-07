@@ -113,6 +113,16 @@ final class ScrollController {
             return false
         }
 
+        // A wheel report carrying a zoom modifier is not scrolling. macOS
+        // magnifies at the pointer on Control and applications zoom on
+        // Command, so reversing one inverts the zoom and interpolating one
+        // turns a notch into a burst of them. Shift is not in this list: it is
+        // a real scroll modifier. The left encoder rides this path.
+        if !event.flags.isDisjoint(with: [.maskControl, .maskCommand, .maskAlternate]) {
+            cancelMotionOnly()
+            return false
+        }
+
         let prefs = Preferences.shared
         guard prefs.scrollSmoothingEnabled || prefs.reverseScroll else { return false }
         let time = now()

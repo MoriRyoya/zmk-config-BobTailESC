@@ -156,11 +156,18 @@
 
         /* 全層の左エンコーダは拡大 / 縮小。CW が拡大、CCW が縮小。
            Base と Win だけに sensor-bindings を定義し、他層は未定義のまま
-           OS 層へフォールバックする (&trans はセンサー用 API を持たない)。 */
+           OS 層へフォールバックする (&trans はセンサー用 API を持たない)。
+
+           mac は ⌘+ / ⌘- (アプリ内の文字サイズ) ではなく、macOS の
+           アクセシビリティズームを使う。こちらはポインタのある位置を中心に
+           画面そのものを拡大する。修飾キーを押しながらのスクロールが
+           その入口で、Control が既定の修飾キー。
+           「システム設定 → アクセシビリティ → ズーム機能」で
+           「スクロールジェスチャと修飾キーを使ってズーム」をオンにする。 */
         enc_zoom_mac: encoder_zoom_mac {
             compatible = "zmk,behavior-sensor-rotate";
             #sensor-binding-cells = <0>;
-            bindings = <&kp LG(EQUAL)>, <&kp LG(MINUS)>;
+            bindings = <&zoom_in_mac>, <&zoom_out_mac>;
             tap-ms = <20>;
         };
 
@@ -173,6 +180,31 @@
     };
 
     macros {
+        /* Control を押した状態でホイールを 1 目盛り送り、離す。HID レポートは
+           送った順に届くので、速く回してもスクロールだけが Control の外へ
+           抜けて、ズームのつもりがページのスクロールになることはない。 */
+        zoom_in_mac: zoom_in_mac {
+            compatible = "zmk,behavior-macro";
+            #binding-cells = <0>;
+            wait-ms = <0>;
+            tap-ms = <0>;
+            bindings =
+                <&macro_press &kp LCTRL>,
+                <&macro_tap &msc SCRL_UP>,
+                <&macro_release &kp LCTRL>;
+        };
+
+        zoom_out_mac: zoom_out_mac {
+            compatible = "zmk,behavior-macro";
+            #binding-cells = <0>;
+            wait-ms = <0>;
+            tap-ms = <0>;
+            bindings =
+                <&macro_press &kp LCTRL>,
+                <&macro_tap &msc SCRL_DOWN>,
+                <&macro_release &kp LCTRL>;
+        };
+
         ind_num: ind_num {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;

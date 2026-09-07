@@ -221,9 +221,16 @@ Space の一つ外側（旧英数、`37`）を押しながら、右手でトラ�
 ## 10. エンコーダとスクロール
 
 - 左エンコーダは全レイヤーで **時計回り＝拡大、反時計回り＝縮小** です。
-  macOS は Command+= / Command+-、Windows は Ctrl+= / Ctrl+- を送ります。
   Fn で音量、Num でタブ切替に変わる以前の割り当ては統一しました。
-  アプリがこのショートカットに対応している場合に働きます。
+- macOS は **Control + ホイール** を送ります。これは macOS のアクセシビリティ
+  ズームの入口で、アプリ内の文字サイズではなく **ポインタのある位置を中心に
+  画面そのものを拡大** します。使う前に「システム設定 → アクセシビリティ →
+  ズーム機能」で「**スクロールジェスチャと修飾キーを使ってズーム**」を
+  オンにしてください（修飾キーの既定が Control です）。
+  アプリ内の文字サイズを変える ⌘+ / ⌘− ではなくなりました。
+  BobTailBar は修飾キー付きのホイールを反転も補間もせず素通しします。
+- Windows は従来どおり Ctrl+= / Ctrl+- で、アプリ内の拡大縮小です。
+  拡大鏡のポインタ追従は拡大鏡を起動しておく必要があるため、変更していません。
 - トラックボールのスクロールは、Mouse 層の中クリックを長押ししている間です。
 
 ### 慣性スクロール
@@ -290,7 +297,7 @@ GitHub 版の Editor はリポジトリ上のファイルを読むため、反�
 | 英数 / かなの保持時間を変える | `ime_mod` / `lt_sym` の `tapping-term-ms` |
 | Space の安全性・Num の待ち時間を調整 | `lt_num` の `tapping-term-ms`、`require-prior-idle-ms`、`quick-tap-ms` |
 | キー操作のレイヤー通知（Consumer 0x01D0–0x01D5 / F22）を止める | `LAYER_INDICATOR` を `0`。AMLの0x01D6通知は `bobtail_status.c` が独立して送信 |
-| エンコーダの割り当て | `enc_zoom_mac` / `enc_zoom_win`。他のレイヤーは sensor 未定義で OS 層へ透過 |
+| エンコーダの割り当て | `enc_zoom_mac`（Control+ホイール）/ `enc_zoom_win`（Ctrl+=）。他のレイヤーは sensor 未定義で OS 層へ透過 |
 | Editor / Studio の表示位置 | `config/BobTail.json` の x/y と `BobTail.dtsi` の physical-layout。`check_keymap.py` が一致を検証 |
 | トラックボールの感度 | `config/boards/shields/Test/BobTail_R.conf` の `CONFIG_PMW3610_CPI` |
 | 慣性スクロールの効き | BobTailBar の「スクロール」設定（プリセット: オフ / 弱め / 標準 / 強め） |
