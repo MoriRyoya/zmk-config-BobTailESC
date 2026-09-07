@@ -190,6 +190,40 @@ enum GlidePhysicsTests {
         precondition(handoff(creep: 0.09) < handoff(creep: 0.05))
         precondition(handoff(creep: 0.2) == 0)
 
-        print("Glide: small rolls coast, direct distance conserved, phases, 60/120/144 Hz, braking on touch, creep fade, coast hand-off, reversal, cancel and sleep passed.")
+        // A trackball keeps spinning after the hand leaves it, so a real flick
+        // arrives as fast ticks followed by the ball's own spin-down. Reading
+        // friction off that dying tail braked a hard throw like a crawl, so the
+        // coast has to answer to how fast the roll ever got.
+        func thrown(interval: Double) -> Double {
+            var p = GlidePhysics()
+            p.pixelsPerTick = 32 * 1.64
+            p.momentum = 0.61
+            p.motionActive = true
+            var coast = 0.0, clock = 100.0, frame = 100.0
+            func advance(to end: Double) {
+                while frame < end {
+                    frame += 1.0 / 120
+                    coast += p.step(time: frame).filter { $0.momentum == 1 || $0.momentum == 2 }
+                        .reduce(0) { $0 + $1.y }
+                }
+            }
+            for _ in 0..<10 { _ = p.feed(x: 0, y: 1, time: clock); clock += interval; advance(to: clock) }
+            var gap = interval
+            for _ in 0..<3 {           // the ball freewheeling down to a stop
+                gap *= 1.6; clock += gap
+                _ = p.feed(x: 0, y: 1, time: clock)
+                advance(to: clock)
+            }
+            p.motionActive = false
+            advance(to: clock + 6)
+            return coast
+        }
+        let flung = [0.008, 0.016, 0.032, 0.064].map { thrown(interval: $0) }
+        for (fast, slow) in zip(flung, flung.dropFirst()) {
+            precondition(fast > slow * 1.5) // every step up in speed carries further
+        }
+        precondition(flung[0] > 900 && flung[3] < 150)
+
+        print("Glide: small rolls coast, direct distance conserved, phases, 60/120/144 Hz, braking on touch, creep fade, coast hand-off, throw scaling, reversal, cancel and sleep passed.")
     }
 }

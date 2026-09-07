@@ -64,6 +64,11 @@ struct GlidePhysics {
     private var lastTickTime = 0.0
     /// Last frame at which the telemetry said the ball was still turning.
     private var ballTurning = 0.0
+    /// The fastest this roll ever got. A trackball keeps spinning after the
+    /// hand leaves it, so the rate at the hand-off is the ball dying, not how
+    /// hard it was thrown -- and reading friction off the dying end made a
+    /// hard flick brake like a crawl.
+    private var peakRate = 0.0
 
     private static func ease(_ value: Double) -> Double {
         let v = min(1, max(0, value))
@@ -133,9 +138,15 @@ struct GlidePhysics {
             vy = reports == 1 ? newY : vy * 0.45 + newY * 0.55
         } else { vx = px / 0.045; vy = py / 0.045 }
         let speed = hypot(vx, vy)
+        peakRate = max(peakRate, tickRate)
         // The friction curve wants the ball's real speed, not the attenuated
         // pixel speed, or a creep would also be read as a low-friction flick.
-        exitRate = min(600, tickRate)
+        // It reads the peak rather than the instant: how far a throw carries
+        // is set by the throw, and the spin-down that follows is the ball
+        // handing the roll over, not the hand asking it to stop. The launch
+        // velocity is still the current one, so this lengthens the glide
+        // without stepping the page up as the coast takes over.
+        exitRate = min(600, max(peakRate, tickRate))
         // Fast multi-tick reports must not hit the old 4,000 px/s ceiling.
         if speed > 18000 { vx *= 18000 / speed; vy *= 18000 / speed }
         if braking { vx = 0; vy = 0 }
